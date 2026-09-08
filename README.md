@@ -1,14 +1,41 @@
-# 🏭 Smart Warehouse AS/RS (Automated Storage & Retrieval System)
+ทำอะไรไปบ้าง 
 
-ระบบบริหารจัดการคลังสินค้าอัจฉริยะอัตโนมัติ (Smart Warehouse) แบบเรียลไทม์ ควบคุมชั้นวางสินค้า 3 มิติ (3-Axis AS/RS Crane) ผ่าน IoT (ESP32), MQTT Broker, Web Dashboard (React + Three.js), REST API (Node.js/Express) และฐานข้อมูล PostgreSQL พร้อมระบบ Containerization ด้วย Docker Compose
-
----
+1. นำระบบและฟังก์ชัน 3D ออกทั้งหมด (Complete 3D Removal)
+App.jsx
+:
+ลบ Route เส้นทาง URL /3d ออก
+ลบการ Import Standalone3DPage ออกจากระบบ Routing
+Dashboard.jsx
+:
+ลบ State selectedProductFor3D และฟังก์ชัน handleViewProduct3D
+ลบแท็บแสดงผล product-3d และการ Import Product3DViewer
+Navbar.jsx
+:
+ลบปุ่มไอคอน 3 ขีด (Hamburger Menu ☰) และเมนู Slide-out Drawer ที่มุมบนขวา
+ลบแท็บ "ผังชั้นวาง 3D" ออกจากแถบเมนูด้านบน คงเหลือเฉพาะแท็บมาตรฐาน (แดชบอร์ด, นำเข้าสินค้า & ผังชั้นวาง, เบิกจ่ายสินค้า, ประวัติบันทึก)
+DashboardOverview.jsx
+:
+ลบปุ่ม "ผังชั้นวาง 3D" ที่อยู่ด้านขวาบนของหน้าแดชบอร์ดออก
+นำ Property onViewProduct3D ออก
+StoreOutPanel.jsx
+:
+ลบปุ่ม "ดู 3D" ออกจากการ์ดแสดงรายการสินค้าในช่องแต่ละช่อง
+ลบไฟล์ Component 3D ออกจากโปรเจกต์:
+ลบไฟล์ frontend/src/components/Standalone3DPage.jsx
+ลบไฟล์ frontend/src/components/Product3DViewer.jsx
+2. ผลลัพธ์และประสิทธิภาพของระบบ
+ขนาดเว็บเล็กลงและโหลดเร็วขึ้น: เนื่องจากไม่มีการดึงไลบรารี Three.js เข้ามาในหน้าเว็บ ทำให้ขนาด JavaScript Bundle ลดลงจาก 1,367 kB เหลือเพียง 832 kB (ลดลงไปกว่า 40%)
+ความเสถียรของระบบหลัก: ระบบนำเข้าสินค้า (Store-In), ผังชั้นวางแบบ 2D, เบิกจ่ายสินค้า (Store-Out), สิทธิ์ผู้ใช้งาน (RBAC), เซ็นเซอร์ฮาร์ดแวร์ (ESP32/MQTT/เครน AS/RS) และฐานข้อมูล ยังคงทำงานได้ครบถ้วนสมบูรณ์ 100%
+3. การ Build และ Deploy ขึ้นระบบจริง
+Rebuild Docker Image: คอมไพล์และสร้าง Docker Image ของ Frontend ใหม่เสร็จสมบูรณ์
+Restart Container: อัปเดตและเริ่มการทำงานคอนเทนเนอร์ asrs_frontend ใหม่ (ทดสอบแล้วตอบสนอง HTTP 200 OK)
+Docker Hub: แท็กและพุช Image เวอร์ชันคลีนล่าสุดขึ้น Docker Hub เรียบร้อยแล้ว:
+kittanay/smartwarehouse-frontend:latest
 
 ## 🌟 ฟีเจอร์หลักของระบบ (Key Features)
 
 1. **Digital Twin & 3D/2D Matrix Visualization:**
    - แสดงผลสถานะคลังสินค้า 9 ช่อง (3x3 Matrix) แบบเรียลไทม์
-   - โมเดลจำลอง 3D ด้วย Three.js และ 2D Interactive Grid
 2. **ระบบนำเข้าและเบิกจ่ายสินค้า (Store-In / Retrieve-Out):**
    - รองรับการสแกน Barcode / QR Code ผ่านกล้องเว็บแคม หรือเครื่องอ่านบาร์โค้ด
    - ระบบค้นหาและแนะนำช่องเก็บสินค้าที่ว่างอัตโนมัติ (Smart Slot Allocation)
