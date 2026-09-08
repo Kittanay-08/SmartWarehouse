@@ -15,6 +15,16 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: asrs_mqtt
+    restart: always
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+
   backend:
     build: ./backend
     container_name: asrs_backend
@@ -23,8 +33,10 @@ services:
       - "5000:5000"
     environment:
       DATABASE_URL: postgresql://postgres:1234@db:5432/warehouse
+      MQTT_BROKER_URL: mqtt://mqtt:1883
     depends_on:
       - db
+      - mqtt
 
   frontend:
     build: ./frontend
@@ -39,7 +51,9 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: asrs_tunnel
     restart: always
-    command: tunnel --no-autoupdate --url http://frontend:80
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN:-}
     depends_on:
       - frontend
 
