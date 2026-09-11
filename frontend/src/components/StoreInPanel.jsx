@@ -110,10 +110,18 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     return code.replace(/-0+/g, '-').trim().toUpperCase();
   };
 
-  // Sync when preSelectedSlot prop changes
+  // Validate that all essential product information is filled before slot selection is allowed
+  const isProductInfoFilled = Boolean(
+    qrCode && qrCode.trim() &&
+    productName && productName.trim() &&
+    category && category.trim() &&
+    weightKg && !isNaN(Number(weightKg)) && Number(weightKg) > 0
+  );
+
+  // Sync when preSelectedSlot prop changes (only if product info is already provided)
   useEffect(() => {
     if (preSelectedSlot && preSelectedSlot.slot_id) {
-      if (!alreadyOccupiedSlot) {
+      if (!alreadyOccupiedSlot && isProductInfoFilled) {
         setSelectedSlotId(String(preSelectedSlot.slot_id));
         setIsLabelPrinted(false);
         setMessage({
@@ -122,7 +130,15 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
         });
       }
     }
-  }, [preSelectedSlot, alreadyOccupiedSlot]);
+  }, [preSelectedSlot, alreadyOccupiedSlot, isProductInfoFilled]);
+
+  // Clear slot selection if product info becomes incomplete
+  useEffect(() => {
+    if (!isProductInfoFilled && selectedSlotId) {
+      setSelectedSlotId('');
+      setIsLabelPrinted(false);
+    }
+  }, [isProductInfoFilled, selectedSlotId]);
 
   // Intelligent QR Code / 1D Barcode Processor
   // Case 1: Scanning a known product barcode for a NEW box -> Auto-fill details & ALLOW picking an empty slot
@@ -370,12 +386,19 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
   // Auto-Suggest empty slot
   const handleAutoSuggestSlot = () => {
+    if (!isProductInfoFilled) {
+      setMessage({
+        type: 'error',
+        text: '⚠️ จำเป็นต้องระบุข้อมูลสินค้า (รหัส QR/บาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะเลือกหรือแนะนำช่องจัดเก็บได้'
+      });
+      return;
+    }
     if (alreadyOccupiedSlot) {
       setMessage({ type: 'error', text: `⚠️ สินค้าชิ้นนี้จัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว ไม่สามารถเลือกช่องเพิ่มได้` });
       return;
     }
     if (emptySlots.length === 0) {
-      setMessage({ type: 'error', text: '⚠️ คลังสินค้าเต็มทุก 9 ช่องแล้ว ไม่สามารถจัดเก็บเพิ่มได้' });
+      setMessage({ type: 'error', text: '⚠️ คลังสินค้าเต็มทุกช่องแล้ว ไม่สามารถจัดเก็บเพิ่มได้' });
       return;
     }
     const sorted = [...emptySlots].sort((a, b) => a.level - b.level || a.bay - b.bay);
@@ -457,6 +480,14 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   const handleSlotClick = (slot) => {
     if (slot.is_occupied) {
       setInspectSlot(slot);
+      return;
+    }
+
+    if (!isProductInfoFilled) {
+      setMessage({
+        type: 'error',
+        text: '⚠️ จำเป็นต้องระบุข้อมูลสินค้า (รหัส QR/บาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะเลือกช่องจัดเก็บได้'
+      });
       return;
     }
 
@@ -1284,33 +1315,67 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 {/* The Requested Button: "เลือกช่องจัดเก็บ" (Pop-up Modal Trigger) */}
                 <button
                   type="button"
-                  onClick={() => setShowSlotSelector(true)}
+                  onClick={() => {
+                    if (!isProductInfoFilled) {
+                      setMessage({
+                        type: 'error',
+                        text: '⚠️ จำเป็นต้องกรอกข้อมูลสินค้า (รหัส QR/บาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะสามารถเลือกช่องจัดเก็บได้'
+                      });
+                      return;
+                    }
+                    setShowSlotSelector(true);
+                  }}
                   className="btn"
                   style={{
                     width: '100%',
                     padding: '13px 18px',
                     fontSize: '1rem',
                     fontWeight: 900,
-                    background: alreadyOccupiedSlot
+                    background: !isProductInfoFilled
+                      ? '#f8fafc'
+                      : alreadyOccupiedSlot
                       ? '#fee2e2'
                       : selectedSlot 
                         ? 'linear-gradient(135deg, #059669, #047857)' 
                         : 'linear-gradient(135deg, #0284c7, #0369a1)',
-                    color: alreadyOccupiedSlot ? '#991b1b' : '#ffffff',
+                    color: !isProductInfoFilled
+                      ? '#64748b'
+                      : alreadyOccupiedSlot ? '#991b1b' : '#ffffff',
                     borderRadius: '12px',
-                    border: alreadyOccupiedSlot ? '2px solid #ef4444' : 'none',
+                    border: !isProductInfoFilled
+                      ? '2px dashed #cbd5e1'
+                      : alreadyOccupiedSlot ? '2px solid #ef4444' : 'none',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    boxShadow: alreadyOccupiedSlot ? 'none' : '0 4px 14px rgba(2, 132, 199, 0.22)',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
+                    boxShadow: (!isProductInfoFilled || alreadyOccupiedSlot) ? 'none' : '0 4px 14px rgba(2, 132, 199, 0.22)',
+                    cursor: !isProductInfoFilled ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    opacity: !isProductInfoFilled ? 0.9 : 1
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Layers size={20} />
+                    {!isProductInfoFilled ? (
+                      <Lock size={20} color="#64748b" />
+                    ) : (
+                      <Layers size={20} />
+                    )}
                     <span>เลือกช่องจัดเก็บ</span>
-                    {alreadyOccupiedSlot ? (
+                    {!isProductInfoFilled ? (
+                      <span style={{
+                        background: '#fee2e2',
+                        color: '#b91c1c',
+                        padding: '3px 10px',
+                        borderRadius: '8px',
+                        fontSize: '0.82rem',
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        🔒 ต้องกรอกข้อมูลสินค้าก่อน
+                      </span>
+                    ) : alreadyOccupiedSlot ? (
                       <span style={{
                         background: '#dc2626',
                         color: '#fff',
@@ -1346,13 +1411,35 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.86rem', fontWeight: 800 }}>
-                    <span>{selectedSlot ? 'เปลี่ยนช่อง' : 'เปิดผัง 2D'}</span>
-                    <Sparkles size={16} />
+                    {!isProductInfoFilled ? (
+                      <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>ระบุข้อมูลสินค้าก่อน ➔</span>
+                    ) : (
+                      <>
+                        <span>{selectedSlot ? 'เปลี่ยนช่อง' : 'เปิดผัง 2D'}</span>
+                        <Sparkles size={16} />
+                      </>
+                    )}
                   </div>
                 </button>
 
-                {/* Selected Slot Information Card (Shown directly under button) */}
-                {selectedSlot && !alreadyOccupiedSlot ? (
+                {/* Status or Information Card below the button */}
+                {!isProductInfoFilled ? (
+                  <div style={{
+                    fontSize: '0.82rem',
+                    color: '#b45309',
+                    background: '#fffbeb',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #fde68a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontWeight: 700
+                  }}>
+                    <AlertCircle size={15} color="#d97706" />
+                    <span>จำเป็นต้องกรอกข้อมูลสินค้า (รหัสบาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะสามารถเลือกช่องจัดเก็บได้</span>
+                  </div>
+                ) : selectedSlot && !alreadyOccupiedSlot ? (
                   <div style={{
                     background: '#f0fdf4',
                     border: '1.5px solid #86efac',
@@ -1398,15 +1485,18 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 ) : !alreadyOccupiedSlot ? (
                   <div style={{
                     fontSize: '0.8rem',
-                    color: '#64748b',
-                    fontWeight: 600,
-                    padding: '2px 4px',
+                    color: '#0369a1',
+                    background: '#f0f9ff',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #bae6fd',
+                    fontWeight: 700,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px'
+                    gap: '6px'
                   }}>
-                    <Info size={14} color="#0284c7" />
-                    <span>กรุณากดปุ่ม <strong>"เลือกช่องจัดเก็บ"</strong> เพื่อเปิดหน้าต่างผังเลือกชั้นวางสินค้า</span>
+                    <CheckCircle2 size={15} color="#0284c7" />
+                    <span>ข้อมูลสินค้าพร้อมแล้ว! กรุณากดปุ่ม <strong>"เลือกช่องจัดเก็บ"</strong> เพื่อเปิดหน้าต่างผังชั้นวาง</span>
                   </div>
                 ) : null}
               </div>
@@ -2053,7 +2143,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 <button
                   type="button"
                   onClick={handleAutoSuggestSlot}
-                  disabled={Boolean(alreadyOccupiedSlot)}
+                  disabled={Boolean(alreadyOccupiedSlot) || !isProductInfoFilled}
                   className="btn btn-secondary"
                   style={{
                     padding: '6px 12px',
@@ -2395,23 +2485,23 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               <button
                 type="button"
                 onClick={() => setShowSlotSelector(false)}
-                disabled={!selectedSlot || Boolean(alreadyOccupiedSlot)}
+                disabled={!selectedSlot || Boolean(alreadyOccupiedSlot) || !isProductInfoFilled}
                 className="btn btn-primary"
                 style={{
                   padding: '9px 24px',
                   fontSize: '0.92rem',
                   fontWeight: 900,
-                  background: (!selectedSlot || alreadyOccupiedSlot)
+                  background: (!selectedSlot || alreadyOccupiedSlot || !isProductInfoFilled)
                     ? '#94a3b8'
                     : 'linear-gradient(135deg, #059669, #10b981)',
-                  borderColor: (!selectedSlot || alreadyOccupiedSlot) ? '#cbd5e1' : '#059669',
-                  cursor: (!selectedSlot || alreadyOccupiedSlot) ? 'not-allowed' : 'pointer',
+                  borderColor: (!selectedSlot || alreadyOccupiedSlot || !isProductInfoFilled) ? '#cbd5e1' : '#059669',
+                  cursor: (!selectedSlot || alreadyOccupiedSlot || !isProductInfoFilled) ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px'
                 }}
               >
-                <Check size={16} /> ยืนยันเลือกช่องนี้และปิดหน้าต่าง
+                <Check size={16} /> ยืนยัน
               </button>
             </div>
           </div>
