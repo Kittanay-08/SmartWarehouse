@@ -34,7 +34,9 @@ import {
   Activity,
   Gauge,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Scale,
+  CornerDownLeft
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -379,6 +381,88 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   const handleInputChange = (setter) => (e) => {
     setter(e.target.value);
     setIsLabelPrinted(false);
+  };
+
+  // Keyboard navigation on Barcode input
+  const handleQrKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!productName?.trim()) {
+        document.getElementById('product-name-input')?.focus();
+      } else if (!weightKg || parseFloat(weightKg) <= 0) {
+        document.getElementById('product-weight-input')?.focus();
+      }
+    }
+  };
+
+  // Keyboard navigation on Product Name input
+  const handleProductNameKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!category) {
+        document.getElementById('product-category-select')?.focus();
+      } else if (!weightKg || parseFloat(weightKg) <= 0) {
+        document.getElementById('product-weight-input')?.focus();
+      }
+    }
+  };
+
+  // Confirm weight value and auto-open storage slot selection modal on Enter key
+  const handleConfirmWeight = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+
+    const parsedWeight = parseFloat(weightKg);
+    if (!weightKg || isNaN(parsedWeight) || parsedWeight <= 0) {
+      setMessage({
+        type: 'error',
+        text: '⚠️ กรุณาระบุน้ำหนักสินค้า (kg) ให้ถูกต้องและมากกว่า 0 ก่อนกดยืนยัน'
+      });
+      return;
+    }
+
+    const cleanWeight = String(parsedWeight);
+    setWeightKg(cleanWeight);
+
+    if (alreadyOccupiedSlot) {
+      setMessage({
+        type: 'error',
+        text: `🛑 สินค้ารหัสนี้ถูกจัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว ไม่สามารถเลือกช่องเพิ่มได้`
+      });
+      return;
+    }
+
+    const hasQr = Boolean(qrCode && qrCode.trim());
+    const hasName = Boolean(productName && productName.trim());
+    const hasCat = Boolean(category && category.trim());
+    const isReady = hasQr && hasName && hasCat && parsedWeight > 0;
+
+    if (isReady) {
+      setMessage({
+        type: 'success',
+        text: `⚖️ บันทึกน้ำหนัก ${cleanWeight} kg เรียบร้อย! เปิดหน้าต่างผังเลือกช่องจัดเก็บสินค้าให้อัตโนมัติ`
+      });
+      if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+      }
+      setShowSlotSelector(true);
+    } else {
+      const missing = [];
+      if (!hasQr) missing.push('รหัส QR/บาร์โค้ด');
+      if (!hasName) missing.push('ชื่อสินค้า');
+      if (!hasCat) missing.push('หมวดหมู่');
+      setMessage({
+        type: 'warning',
+        text: `⚖️ บันทึกน้ำหนัก ${cleanWeight} kg สำเร็จ! แต่ยังขาด: ${missing.join(', ')} (กรุณากรอกให้ครบเพื่อปลดล็อกการเลือกช่องจัดเก็บ)`
+      });
+    }
+  };
+
+  // Handle Enter key on Weight input field
+  const handleWeightKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleConfirmWeight(e);
+    }
   };
 
   const emptySlots = slots.filter(s => !s.is_occupied);
@@ -1251,11 +1335,13 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   รหัส QR Code / บาร์โค้ดสินค้า *
                 </label>
                 <input
+                  id="product-qr-input"
                   type="text"
                   className="form-input"
                   placeholder="กรอกรหัส หรือสแกนผ่านกล้อง"
                   value={qrCode}
                   onChange={handleQrInputChange}
+                  onKeyDown={handleQrKeyDown}
                   style={{
                     fontFamily: 'var(--font-mono)',
                     borderColor: alreadyOccupiedSlot ? '#ef4444' : '#0284c7',
@@ -1270,11 +1356,13 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   ชื่อสินค้า (Product Name) *
                 </label>
                 <input
+                  id="product-name-input"
                   type="text"
                   className="form-input"
                   placeholder="ระบุชื่อสินค้า"
                   value={productName}
                   onChange={handleInputChange(setProductName)}
+                  onKeyDown={handleProductNameKeyDown}
                   required
                 />
               </div>
@@ -1285,6 +1373,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                     หมวดหมู่สินค้า *
                   </label>
                   <select
+                    id="product-category-select"
                     className="form-input"
                     value={category}
                     onChange={handleInputChange(setCategory)}
@@ -1301,18 +1390,71 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                    น้ำหนัก (kg) *
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    className="form-input"
-                    placeholder=""
-                    value={weightKg}
-                    onChange={handleInputChange(setWeightKg)}
-                    required
-                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Scale size={15} color="#0284c7" /> น้ำหนัก (kg) *
+                    </label>
+                    <span style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      color: Number(weightKg) > 0 ? '#0284c7' : '#64748b',
+                      background: Number(weightKg) > 0 ? '#e0f2fe' : '#f1f5f9',
+                      border: Number(weightKg) > 0 ? '1px solid #bae6fd' : '1px solid #e2e8f0',
+                      padding: '2px 7px',
+                      borderRadius: '6px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      transition: 'all 0.2s ease'
+                    }}>
+                      <CornerDownLeft size={11} /> กด Enter ยืนยัน
+                    </span>
+                  </div>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      id="product-weight-input"
+                      type="number"
+                      step="0.1"
+                      className="form-input"
+                      placeholder="เช่น 1.5"
+                      value={weightKg}
+                      onChange={handleInputChange(setWeightKg)}
+                      onKeyDown={handleWeightKeyDown}
+                      style={{
+                        paddingRight: '72px',
+                        borderColor: Number(weightKg) > 0 ? '#0284c7' : '#cbd5e1',
+                        fontWeight: 700,
+                        fontSize: '0.95rem'
+                      }}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={handleConfirmWeight}
+                      title="กด Enter หรือคลิกเพื่อยืนยันน้ำหนักและเลือกช่องจัดเก็บ"
+                      style={{
+                        position: 'absolute',
+                        right: '5px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: Number(weightKg) > 0 ? 'linear-gradient(135deg, #0284c7, #0369a1)' : '#e2e8f0',
+                        color: Number(weightKg) > 0 ? '#ffffff' : '#94a3b8',
+                        border: 'none',
+                        borderRadius: '7px',
+                        padding: '5px 9px',
+                        fontSize: '0.75rem',
+                        fontWeight: 800,
+                        cursor: Number(weightKg) > 0 ? 'pointer' : 'not-allowed',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        boxShadow: Number(weightKg) > 0 ? '0 2px 4px rgba(2,132,199,0.25)' : 'none',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <CornerDownLeft size={12} /> ยืนยัน
+                    </button>
+                  </div>
                 </div>
               </div>
 
