@@ -1390,71 +1390,25 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 </div>
 
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <Scale size={15} color="#0284c7" /> น้ำหนัก (kg) *
-                    </label>
-                    <span style={{
-                      fontSize: '0.72rem',
+                  <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '6px' }}>
+                    <Scale size={15} color="#0284c7" /> น้ำหนัก (kg) *
+                  </label>
+                  <input
+                    id="product-weight-input"
+                    type="number"
+                    step="0.1"
+                    className="form-input"
+                    placeholder="เช่น 1.5"
+                    value={weightKg}
+                    onChange={handleInputChange(setWeightKg)}
+                    onKeyDown={handleWeightKeyDown}
+                    style={{
+                      borderColor: Number(weightKg) > 0 ? '#0284c7' : '#cbd5e1',
                       fontWeight: 700,
-                      color: Number(weightKg) > 0 ? '#0284c7' : '#64748b',
-                      background: Number(weightKg) > 0 ? '#e0f2fe' : '#f1f5f9',
-                      border: Number(weightKg) > 0 ? '1px solid #bae6fd' : '1px solid #e2e8f0',
-                      padding: '2px 7px',
-                      borderRadius: '6px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      transition: 'all 0.2s ease'
-                    }}>
-                      <CornerDownLeft size={11} /> กด Enter ยืนยัน
-                    </span>
-                  </div>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <input
-                      id="product-weight-input"
-                      type="number"
-                      step="0.1"
-                      className="form-input"
-                      placeholder="เช่น 1.5"
-                      value={weightKg}
-                      onChange={handleInputChange(setWeightKg)}
-                      onKeyDown={handleWeightKeyDown}
-                      style={{
-                        paddingRight: '72px',
-                        borderColor: Number(weightKg) > 0 ? '#0284c7' : '#cbd5e1',
-                        fontWeight: 700,
-                        fontSize: '0.95rem'
-                      }}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={handleConfirmWeight}
-                      title="กด Enter หรือคลิกเพื่อยืนยันน้ำหนักและเลือกช่องจัดเก็บ"
-                      style={{
-                        position: 'absolute',
-                        right: '5px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: Number(weightKg) > 0 ? 'linear-gradient(135deg, #0284c7, #0369a1)' : '#e2e8f0',
-                        color: Number(weightKg) > 0 ? '#ffffff' : '#94a3b8',
-                        border: 'none',
-                        borderRadius: '7px',
-                        padding: '5px 9px',
-                        fontSize: '0.75rem',
-                        fontWeight: 800,
-                        cursor: Number(weightKg) > 0 ? 'pointer' : 'not-allowed',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                        boxShadow: Number(weightKg) > 0 ? '0 2px 4px rgba(2,132,199,0.25)' : 'none',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      <CornerDownLeft size={12} /> ยืนยัน
-                    </button>
-                  </div>
+                      fontSize: '0.95rem'
+                    }}
+                    required
+                  />
                 </div>
               </div>
 
