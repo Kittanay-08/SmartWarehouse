@@ -139,6 +139,7 @@ try {
     mqttClient.subscribe('warehouse/asrs/status');
     mqttClient.subscribe('warehouse/esp32/ping');
     mqttClient.subscribe('warehouse/asrs/logs');
+    mqttClient.subscribe('warehouse/asrs/qr_scanned');
     io.emit('mqtt_status', { connected: true, broker: MQTT_BROKER_URL });
   });
 
@@ -158,8 +159,18 @@ try {
           craneState = { ...craneState, ...data, lastPing: Date.now() };
           io.emit('crane_telemetry', craneState);
         }
+      } else if (topic === 'warehouse/asrs/qr_scanned') {
+        const scannedCode = data.scanned_qr || data.qr || data.code || msgStr;
+        const device = data.device || 'ESP32_CAM';
+        console.log(`📷 [MQTT QR] Received from ${device}: ${scannedCode}`);
+        io.emit('qr_scanned', { scanned_qr: scannedCode, device, timestamp: Date.now() });
       }
-    } catch (e) {}
+    } catch (e) {
+      if (topic === 'warehouse/asrs/qr_scanned') {
+        console.log(`📷 [MQTT QR Plaintext]: ${msgStr}`);
+        io.emit('qr_scanned', { scanned_qr: msgStr, device: 'ESP32_CAM', timestamp: Date.now() });
+      }
+    }
   });
 
   mqttClient.on('error', () => { mqttConnected = false; });

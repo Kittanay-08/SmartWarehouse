@@ -53,7 +53,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     transactions, 
     craneState, 
     lookupProduct, 
-    saveProductToCatalog 
+    saveProductToCatalog,
+    lastScannedQr 
   } = useWarehouse();
   const { user, canManageSlots, getDepartmentInfo } = useAuth();
   const isManager = canManageSlots ? canManageSlots(user) : true;
@@ -141,6 +142,19 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       setIsLabelPrinted(false);
     }
   }, [isProductInfoFilled, selectedSlotId]);
+
+  // Handle incoming QR / Barcode scan from ESP32-CAM via MQTT
+  useEffect(() => {
+    if (lastScannedQr && lastScannedQr.code) {
+      console.log('📷 ESP32-CAM Scanned Code received:', lastScannedQr.code);
+      playScanBeep();
+      processIncomingQrCode(lastScannedQr.code);
+      setMessage({
+        type: 'success',
+        text: `📷 สแกนจากกล้อง ${lastScannedQr.device || 'ESP32-CAM'} สำเร็จ: [${lastScannedQr.code}]`
+      });
+    }
+  }, [lastScannedQr]);
 
   // Intelligent QR Code / 1D Barcode Processor
   // Case 1: Scanning a known product barcode for a NEW box -> Auto-fill details & ALLOW picking an empty slot

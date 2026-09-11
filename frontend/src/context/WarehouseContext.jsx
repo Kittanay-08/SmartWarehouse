@@ -100,6 +100,7 @@ export const WarehouseProvider = ({ children }) => {
   const [esp32Connected, setEsp32Connected] = useState(true);
   const [simulatorActive, setSimulatorActive] = useState(true);
   const [mqttLogs, setMqttLogs] = useState([]);
+  const [lastScannedQr, setLastScannedQr] = useState(null);
 
   // Save slots, transactions, and learned product catalog locally
   useEffect(() => {
@@ -211,6 +212,15 @@ export const WarehouseProvider = ({ children }) => {
 
     socket.on('esp32_status', (status) => {
       setEsp32Connected(status.connected);
+    });
+
+    socket.on('qr_scanned', (data) => {
+      console.log('📷 Socket received qr_scanned:', data);
+      setLastScannedQr({
+        code: data.scanned_qr || '',
+        device: data.device || 'ESP32_CAM',
+        timestamp: data.timestamp || Date.now()
+      });
     });
 
     return () => {
@@ -525,6 +535,8 @@ export const WarehouseProvider = ({ children }) => {
       esp32Connected,
       simulatorActive,
       mqttLogs,
+      lastScannedQr,
+      setLastScannedQr,
       productCatalog,
       saveProductToCatalog,
       lookupProduct,
