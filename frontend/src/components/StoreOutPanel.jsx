@@ -206,8 +206,8 @@ export const StoreOutPanel = () => {
       ) : (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-          gap: '24px'
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
+          gap: '20px'
         }}>
           {filteredSlots.map(slot => (
             <div key={slot.slot_id} className="glass-panel" style={{

@@ -1090,15 +1090,15 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
         </div>
       )}
 
-      {/* Main Grid Layout: Left Inbound Form + Right Compact 2D Shelf Matrix */}
+      {/* Main Container: Store-In Form & Mandatory Printing Workflow */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(380px, 1.05fr) minmax(420px, 1.15fr)',
-        gap: '20px',
-        alignItems: 'start'
+        maxWidth: '920px',
+        margin: '0 auto',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '18px'
       }}>
-        {/* LEFT COLUMN: Store-In Form & Mandatory Printing Workflow */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div className="glass-panel" style={{ padding: '22px', background: '#ffffff', border: '1.5px solid #bae6fd' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1367,7 +1367,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div className="form-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
                   <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
                     หมวดหมู่สินค้า *
@@ -1515,13 +1515,15 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '8px',
                     boxShadow: (!isProductInfoFilled || alreadyOccupiedSlot) ? 'none' : '0 4px 14px rgba(2, 132, 199, 0.22)',
                     cursor: !isProductInfoFilled ? 'not-allowed' : 'pointer',
                     transition: 'all 0.2s ease',
                     opacity: !isProductInfoFilled ? 0.9 : 1
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                     {!isProductInfoFilled ? (
                       <Lock size={20} color="#64748b" />
                     ) : (
@@ -1935,7 +1937,6 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             )}
           </div>
         </div>
-      </div>
 
       {/* MODAL 1: PRINT QR CODE LABEL PREVIEW MODAL */}
       {showPrintModal && (

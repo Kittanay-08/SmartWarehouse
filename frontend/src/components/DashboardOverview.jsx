@@ -98,7 +98,7 @@ export const DashboardOverview = ({ setActiveTab }) => {
       {/* 4 Main KPI Cards */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
         gap: '20px',
         marginBottom: '28px'
       }}>
@@ -238,7 +238,7 @@ export const DashboardOverview = ({ setActiveTab }) => {
       {/* Middle Grid: Category Breakdown & Machine Live Status */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
         gap: '24px',
         marginBottom: '28px'
       }}>
