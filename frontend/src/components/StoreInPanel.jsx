@@ -552,7 +552,78 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   };
 
   const confirmPrintAndReady = () => {
-    window.print();
+    // Isolated single-page printing to guarantee exactly 1 page
+    const el = document.getElementById('printable-label-area');
+    if (!el) {
+      window.print();
+    } else {
+      let iframe = document.getElementById('smart-warehouse-print-frame');
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'smart-warehouse-print-frame';
+        iframe.style.position = 'fixed';
+        iframe.style.top = '-9999px';
+        iframe.style.left = '-9999px';
+        iframe.style.width = '0px';
+        iframe.style.height = '0px';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+      }
+      const iframeDoc = iframe.contentWindow.document;
+      iframeDoc.open();
+      iframeDoc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>ฉลากสินค้า_${productName || qrCode || 'Label'}</title>
+            <style>
+              @page {
+                size: auto;
+                margin: 6mm;
+              }
+              * {
+                box-sizing: border-box;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              html, body {
+                margin: 0;
+                padding: 0;
+                background: #ffffff;
+                font-family: system-ui, -apple-system, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: flex-start;
+              }
+              .print-container {
+                width: 360px;
+                max-width: 100%;
+                margin: 4mm auto;
+                page-break-inside: avoid;
+                break-inside: avoid;
+              }
+              #printable-label-area {
+                box-shadow: none !important;
+                margin: 0 auto !important;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="print-container">
+              ${el.outerHTML}
+            </div>
+          </body>
+        </html>
+      `);
+      iframeDoc.close();
+
+      setTimeout(() => {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      }, 200);
+    }
+
     setIsLabelPrinted(true);
     setShowPrintModal(false);
     setMessage({
@@ -1809,12 +1880,15 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             <div id="printable-label-area" style={{
               background: '#ffffff',
               color: '#000000',
-              padding: '20px 16px',
+              padding: '18px 16px',
               borderRadius: '12px',
               border: '2.5px solid #000000',
-              margin: '0 auto 18px auto',
+              maxWidth: '360px',
+              margin: '0 auto 16px auto',
               textAlign: 'center',
-              boxShadow: '0 4px 15px rgba(0,0,0,0.08)'
+              boxShadow: '0 4px 15px rgba(0,0,0,0.08)',
+              pageBreakInside: 'avoid',
+              breakInside: 'avoid'
             }}>
               <div style={{
                 fontSize: '8pt',

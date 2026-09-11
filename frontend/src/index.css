@@ -403,20 +403,54 @@ select.form-input {
   margin: 4px !important;
 }
 
-/* Print Styles */
+/* Print Styles - Guaranteed 1-Page Layout */
 @media print {
+  @page {
+    size: auto;
+    margin: 8mm;
+  }
+
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  html, body {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+  }
+
   body * {
-    visibility: hidden;
+    visibility: hidden !important;
   }
-  #printable-label-area, #printable-label-area * {
-    visibility: visible;
+
+  #printable-label-area,
+  #printable-label-area * {
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
+
   #printable-label-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+    position: fixed !important;
+    top: 10mm !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 360px !important;
+    max-width: 90vw !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+    z-index: 999999 !important;
   }
 }

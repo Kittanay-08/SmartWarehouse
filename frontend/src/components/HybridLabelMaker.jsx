@@ -43,7 +43,76 @@ export const HybridLabelMaker = () => {
   });
 
   const handlePrint = () => {
-    window.print();
+    const el = document.getElementById('printable-label-area');
+    if (!el) {
+      window.print();
+      return;
+    }
+    let iframe = document.getElementById('smart-warehouse-print-frame');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'smart-warehouse-print-frame';
+      iframe.style.position = 'fixed';
+      iframe.style.top = '-9999px';
+      iframe.style.left = '-9999px';
+      iframe.style.width = '0px';
+      iframe.style.height = '0px';
+      iframe.style.border = 'none';
+      document.body.appendChild(iframe);
+    }
+    const iframeDoc = iframe.contentWindow.document;
+    iframeDoc.open();
+    iframeDoc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>ฉลากสินค้า_${productName || customQr || 'Label'}</title>
+          <style>
+            @page {
+              size: auto;
+              margin: 6mm;
+            }
+            * {
+              box-sizing: border-box;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: #ffffff;
+              font-family: system-ui, -apple-system, sans-serif;
+              display: flex;
+              justify-content: center;
+              align-items: flex-start;
+            }
+            .print-container {
+              width: 360px;
+              max-width: 100%;
+              margin: 4mm auto;
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
+            #printable-label-area {
+              box-shadow: none !important;
+              margin: 0 auto !important;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-container">
+            ${el.outerHTML}
+          </div>
+        </body>
+      </html>
+    `);
+    iframeDoc.close();
+
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    }, 200);
   };
 
   const handleCopyPayload = () => {
