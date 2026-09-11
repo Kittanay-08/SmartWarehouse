@@ -1281,10 +1281,10 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   )}
                 </div>
 
-                {/* The Requested Button: "เลือกช่องจัดเก็บ" */}
+                {/* The Requested Button: "เลือกช่องจัดเก็บ" (Pop-up Modal Trigger) */}
                 <button
                   type="button"
-                  onClick={() => setShowSlotSelector(!showSlotSelector)}
+                  onClick={() => setShowSlotSelector(true)}
                   className="btn"
                   style={{
                     width: '100%',
@@ -1340,378 +1340,75 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                         fontSize: '0.82rem',
                         fontWeight: 700
                       }}>
-                        (คลิกเพื่อเปิดผัง 2D)
+                        (คลิกเพื่อเปิดผังเลือกชั้นวาง)
                       </span>
                     )}
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.86rem', fontWeight: 800 }}>
-                    {showSlotSelector ? (
-                      <><span>ซ่อนผัง</span> <ChevronUp size={18} /></>
-                    ) : (
-                      <><span>เปิดผัง 2D</span> <ChevronDown size={18} /></>
-                    )}
+                    <span>{selectedSlot ? 'เปลี่ยนช่อง' : 'เปิดผัง 2D'}</span>
+                    <Sparkles size={16} />
                   </div>
                 </button>
 
-                {/* Collapsible 2D Shelf Matrix Container right under the button ("ภายใต้ปุ่มคลิก") */}
-                {showSlotSelector && (
-                  <div className="animate-fade-in" style={{
-                    background: '#f8fafc',
-                    padding: '16px',
-                    borderRadius: '14px',
-                    border: '1.5px solid #bae6fd',
-                    marginTop: '4px'
+                {/* Selected Slot Information Card (Shown directly under button) */}
+                {selectedSlot && !alreadyOccupiedSlot ? (
+                  <div style={{
+                    background: '#f0fdf4',
+                    border: '1.5px solid #86efac',
+                    borderRadius: '10px',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: '0.88rem'
                   }}>
-                    {/* Header with Title & Action Buttons */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#15803d', fontWeight: 800 }}>
+                      <CheckCircle2 size={18} color="#15803d" />
                       <div>
-                        <div style={{ fontSize: '0.92rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Layers size={17} color="#059669" /> ผังชั้นวางสินค้า 2D ({slots.length} ช่อง) *
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', fontWeight: 600 }}>
-                          คลิกเลือกช่องสีเขียวบนผังเพื่อกำหนดตำแหน่งจัดเก็บสินค้า
+                        <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 700 }}>ช่องจัดเก็บบนชั้นวางที่เลือก:</div>
+                        <div style={{ fontSize: '0.98rem', fontWeight: 900, color: '#0f172a' }}>
+                          ช่อง {selectedSlot.slot_code} (ชั้น {selectedSlot.level}, ช่อง {selectedSlot.bay})
                         </div>
                       </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          onClick={handleAutoSuggestSlot}
-                          disabled={Boolean(alreadyOccupiedSlot)}
-                          className="btn btn-secondary"
-                          style={{
-                            padding: '5px 10px',
-                            fontSize: '0.78rem',
-                            color: alreadyOccupiedSlot ? '#94a3b8' : '#0284c7',
-                            borderColor: alreadyOccupiedSlot ? '#cbd5e1' : '#0284c7',
-                            fontWeight: 800,
-                            cursor: alreadyOccupiedSlot ? 'not-allowed' : 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          <Sparkles size={13} /> แนะนำช่องว่าง
-                        </button>
-
-                        {isManager ? (
-                          <button
-                            type="button"
-                            onClick={() => handleQuickAddSlot(nextSlot)}
-                            disabled={isAddingSlot}
-                            className={`btn btn-primary ${!isAddingSlot ? 'pulse-glow-btn' : ''}`}
-                            style={{
-                              padding: '5px 12px',
-                              fontSize: '0.78rem',
-                              fontWeight: 800,
-                              background: 'linear-gradient(135deg, #059669, #10b981)',
-                              borderColor: '#059669',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              cursor: isAddingSlot ? 'wait' : 'pointer'
-                            }}
-                            title={`คลิกเพื่อเพิ่มช่องจัดเก็บ ${nextSlot.slot_code}`}
-                          >
-                            <Plus size={13} /> 
-                            {isAddingSlot ? 'กำลังเพิ่ม...' : `+ เพิ่มช่อง (${nextSlot.slot_code})`}
-                          </button>
-                        ) : null}
-                      </div>
                     </div>
-
-                    {/* Compact Legend */}
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      fontSize: '0.74rem',
-                      fontWeight: 700,
-                      marginBottom: '10px',
-                      background: '#ffffff',
-                      padding: '6px 10px',
-                      borderRadius: '8px',
-                      border: '1px solid #e2e8f0',
-                      flexWrap: 'wrap'
-                    }}>
-                      <span style={{ color: '#15803d', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ width: '9px', height: '9px', borderRadius: '3px', background: '#86efac', display: 'inline-block' }} /> ว่าง (คลิกเลือก)
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '0.82rem',
+                        color: '#0369a1',
+                        fontWeight: 800,
+                        background: '#e0f2fe',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        border: '1px solid #bae6fd'
+                      }}>
+                        X:{selectedSlot.x_axis} | Y:{selectedSlot.y_axis}
                       </span>
-                      <span style={{ color: '#0284c7', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ width: '9px', height: '9px', borderRadius: '3px', background: '#0284c7', display: 'inline-block' }} /> กำลังเลือก
-                      </span>
-                      <span style={{ color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ width: '9px', height: '9px', borderRadius: '3px', background: '#fca5a5', display: 'inline-block' }} /> มีสินค้า
-                      </span>
-                    </div>
-
-                    {/* 2D Interactive Shelf Grid */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {levels.map(lvl => (
-                        <div key={lvl} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <div style={{
-                            width: '52px',
-                            textAlign: 'center',
-                            fontSize: '0.82rem',
-                            fontWeight: 900,
-                            color: '#0369a1',
-                            background: '#e0f2fe',
-                            padding: '10px 2px',
-                            borderRadius: '8px',
-                            border: '1.5px solid #7dd3fc',
-                            flexShrink: 0
-                          }}>
-                            ชั้น {lvl}
-                          </div>
-
-                          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${bays.length}, 1fr)`, gap: '6px', flex: 1 }}>
-                            {bays.map(bay => {
-                              const slot = slots.find(s => Number(s.level) === lvl && Number(s.bay) === bay);
-                              if (!slot) {
-                                const codeForEmpty = `A-${String(lvl).padStart(2, '0')}-${String(bay).padStart(2, '0')}`;
-                                const isNextTarget = nextSlot.level === lvl && nextSlot.bay === bay;
-                                return (
-                                  <div
-                                    key={`empty-${lvl}-${bay}`}
-                                    onClick={() => {
-                                      if (!isManager) {
-                                        setMessage({ type: 'error', text: `🔒 จำกัดสิทธิ์: เฉพาะฝ่ายบริหารและฝ่ายวิศวกรรมเท่านั้นที่มีสิทธิ์เพิ่มช่องจัดเก็บ` });
-                                        return;
-                                      }
-                                      if (!isAddingSlot) {
-                                        handleQuickAddSlot({
-                                          rack: 'A',
-                                          level: lvl,
-                                          bay: bay,
-                                          slot_code: codeForEmpty
-                                        });
-                                      }
-                                    }}
-                                    style={{
-                                      padding: '8px 4px',
-                                      borderRadius: '8px',
-                                      border: isNextTarget ? '2px dashed #0284c7' : '1.5px dashed #cbd5e1',
-                                      background: isNextTarget ? '#f0f9ff' : '#ffffff',
-                                      minHeight: '58px',
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      cursor: isManager ? 'pointer' : 'default',
-                                      color: isNextTarget ? '#0284c7' : '#94a3b8',
-                                      fontSize: '0.74rem',
-                                      fontWeight: 800,
-                                      userSelect: 'none'
-                                    }}
-                                  >
-                                    <Plus size={13} color={isNextTarget ? '#0284c7' : '#94a3b8'} />
-                                    <span>+ {codeForEmpty}</span>
-                                  </div>
-                                );
-                              }
-
-                              const isSelected = String(slot.slot_id) === String(selectedSlotId);
-                              const isOccupied = slot.is_occupied;
-                              const isTheOccupiedSlot = alreadyOccupiedSlot && alreadyOccupiedSlot.slot_id === slot.slot_id;
-
-                              return (
-                                <div
-                                  key={slot.slot_id}
-                                  onClick={() => handleSlotClick(slot)}
-                                  style={{
-                                    padding: '6px 6px',
-                                    borderRadius: '8px',
-                                    background: isTheOccupiedSlot
-                                      ? '#fee2e2'
-                                      : isSelected 
-                                      ? '#e0f2fe' 
-                                      : isOccupied 
-                                      ? '#fee2e2' 
-                                      : '#dcfce7',
-                                    border: `2px solid ${
-                                      isTheOccupiedSlot
-                                        ? '#ef4444'
-                                        : isSelected 
-                                        ? '#0284c7' 
-                                        : isOccupied 
-                                        ? '#fca5a5' 
-                                        : '#86efac'
-                                    }`,
-                                    cursor: 'pointer',
-                                    boxShadow: isTheOccupiedSlot 
-                                      ? '0 0 0 2px rgba(239, 68, 68, 0.4)' 
-                                      : isSelected 
-                                      ? '0 0 0 2px rgba(2, 132, 199, 0.4)' 
-                                      : 'none',
-                                    minHeight: '58px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    justifyContent: 'space-between',
-                                    textAlign: 'center',
-                                    transition: 'all 0.15s ease'
-                                  }}
-                                >
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{
-                                      fontWeight: 900,
-                                      fontSize: '0.8rem',
-                                      color: isTheOccupiedSlot ? '#b91c1c' : isSelected ? '#0369a1' : isOccupied ? '#b91c1c' : '#15803d',
-                                      fontFamily: 'var(--font-mono)'
-                                    }}>
-                                      {slot.slot_code}
-                                    </span>
-                                    <span style={{ fontSize: '0.66rem', color: '#64748b', fontWeight: 700 }}>
-                                      {slot.x_axis},{slot.y_axis}
-                                    </span>
-                                  </div>
-
-                                  {isTheOccupiedSlot ? (
-                                    <div style={{ color: '#b91c1c', fontWeight: 900, fontSize: '0.7rem' }}>
-                                      ⚠️ มีสินค้านี้
-                                    </div>
-                                  ) : isSelected ? (
-                                    <div style={{ color: '#0284c7', fontWeight: 900, fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-                                      <CheckCircle2 size={12} /> เลือกช่องนี้
-                                    </div>
-                                  ) : isOccupied ? (
-                                    <div style={{
-                                      fontFamily: 'var(--font-mono)',
-                                      fontSize: '0.68rem',
-                                      fontWeight: 800,
-                                      color: '#b91c1c',
-                                      background: '#ffffff',
-                                      padding: '1px 3px',
-                                      borderRadius: '3px',
-                                      border: '1px solid #fecdd3',
-                                      whiteSpace: 'nowrap',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis'
-                                    }}>
-                                      🔲 {slot.qr_code || 'มีของ'}
-                                    </div>
-                                  ) : (
-                                    <div style={{ color: '#15803d', fontWeight: 700, fontSize: '0.72rem' }}>
-                                      ○ ว่าง (คลิก)
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Selected Slot Indicator Status Badge */}
-                    <div style={{
-                      marginTop: '10px',
-                      background: alreadyOccupiedSlot 
-                        ? '#fee2e2' 
-                        : selectedSlot 
-                        ? '#dcfce7' 
-                        : '#fef3c7',
-                      padding: '10px 14px',
-                      borderRadius: '10px',
-                      border: `1.5px solid ${
-                        alreadyOccupiedSlot 
-                          ? '#fca5a5' 
-                          : selectedSlot 
-                          ? '#86efac' 
-                          : '#fde68a'
-                      }`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
-                      gap: '8px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {alreadyOccupiedSlot ? (
-                          <Ban size={18} color="#dc2626" />
-                        ) : (
-                          <MapPin size={18} color={selectedSlot ? '#15803d' : '#b45309'} />
-                        )}
-                        <div>
-                          <div style={{ fontSize: '0.75rem', color: alreadyOccupiedSlot ? '#b91c1c' : selectedSlot ? '#15803d' : '#b45309', fontWeight: 800 }}>
-                            {alreadyOccupiedSlot ? 'สถานะ: มีอยู่ในคลังแล้ว' : selectedSlot ? 'ช่องจัดเก็บที่เลือก:' : 'ยังไม่ได้เลือกช่องจัดเก็บ:'}
-                          </div>
-                          <div style={{ fontSize: '0.92rem', fontWeight: 900, color: '#0f172a' }}>
-                            {alreadyOccupiedSlot 
-                              ? `จัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (ไม่อนุญาตให้เลือกช่องซ้ำ)`
-                              : selectedSlot 
-                              ? `ช่อง ${selectedSlot.slot_code} (ชั้น ${selectedSlot.level}, ช่อง ${selectedSlot.bay})` 
-                              : 'กรุณาคลิกเลือกช่องสีเขียวบนผังด้านบน'}
-                          </div>
-                        </div>
-                      </div>
-
-                      {selectedSlot && !alreadyOccupiedSlot && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.82rem',
-                            fontWeight: 900,
-                            color: '#0369a1',
-                            background: '#ffffff',
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            border: '1px solid #bae6fd'
-                          }}>
-                            X:{selectedSlot.x_axis} | Y:{selectedSlot.y_axis}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setShowSlotSelector(false)}
-                            className="btn btn-success"
-                            style={{ padding: '4px 10px', fontSize: '0.78rem', fontWeight: 800 }}
-                          >
-                            ✓ ยืนยันช่องนี้
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Quick Dropdown Alternative */}
-                    <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #cbd5e1' }}>
-                      <label style={{ fontSize: '0.78rem', fontWeight: 800, color: '#64748b', display: 'block', marginBottom: '4px' }}>
-                        หรือเลือกช่องจัดเก็บจากรายการดรอปดาวน์:
-                      </label>
-                      <select
-                        className="form-input"
-                        value={selectedSlotId}
-                        disabled={Boolean(alreadyOccupiedSlot)}
-                        onChange={(e) => {
-                          if (alreadyOccupiedSlot) return;
-                          setSelectedSlotId(e.target.value);
-                          setIsLabelPrinted(false);
-                          const found = slots.find(s => String(s.slot_id) === e.target.value);
-                          if (found) {
-                            setMessage({
-                              type: 'success',
-                              text: `📍 เลือกช่อง ${found.slot_code} (X:${found.x_axis}, Y:${found.y_axis}, Z:${found.z_axis}) เรียบร้อยแล้ว`
-                            });
-                          }
-                        }}
-                        style={{
-                          borderColor: selectedSlotId ? '#059669' : '#cbd5e1',
-                          fontWeight: 700,
-                          fontSize: '0.85rem',
-                          padding: '6px 10px',
-                          background: alreadyOccupiedSlot ? '#f1f5f9' : '#ffffff',
-                          cursor: alreadyOccupiedSlot ? 'not-allowed' : 'pointer'
-                        }}
+                      <button
+                        type="button"
+                        onClick={() => setShowSlotSelector(true)}
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 10px', fontSize: '0.78rem', fontWeight: 800 }}
                       >
-                        <option value="">{alreadyOccupiedSlot ? '-- ระงับการเลือก (สินค้านี้จัดเก็บในคลังแล้ว) --' : '-- หรือคลิกเลือกจากดรอปดาวน์ --'}</option>
-                        {slots.map(s => (
-                          <option key={s.slot_id} value={s.slot_id} disabled={s.is_occupied}>
-                            {s.slot_code} (ชั้น {s.level}, ช่อง {s.bay}) ➔ พิกัด X:{s.x_axis} Y:{s.y_axis} {s.is_occupied ? `❌ [ไม่ว่าง - QR: ${s.qr_code}]` : '✨ [ว่างพร้อมจัดเก็บ]'}
-                          </option>
-                        ))}
-                      </select>
+                        เปลี่ยนช่อง
+                      </button>
                     </div>
                   </div>
-                )}
+                ) : !alreadyOccupiedSlot ? (
+                  <div style={{
+                    fontSize: '0.8rem',
+                    color: '#64748b',
+                    fontWeight: 600,
+                    padding: '2px 4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    <Info size={14} color="#0284c7" />
+                    <span>กรุณากดปุ่ม <strong>"เลือกช่องจัดเก็บ"</strong> เพื่อเปิดหน้าต่างผังเลือกชั้นวางสินค้า</span>
+                  </div>
+                ) : null}
               </div>
 
               {/* Step 2: Print QR Code Button */}
@@ -2265,6 +1962,462 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
         </div>
       )}
 
+      {/* POP-UP MODAL: ผังเลือกช่องชั้นวางสินค้า 2D (Slot Selector Modal) */}
+      {showSlotSelector && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2400,
+          padding: '16px'
+        }}>
+          <div className="glass-panel animate-scale-up" style={{
+            maxWidth: '740px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            background: '#ffffff',
+            borderRadius: '20px',
+            padding: '24px',
+            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.3)',
+            border: '2px solid #bae6fd'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '16px',
+              paddingBottom: '12px',
+              borderBottom: '1px solid #e2e8f0'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  background: '#e0f2fe',
+                  padding: '10px',
+                  borderRadius: '12px',
+                  color: '#0284c7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Layers size={24} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>
+                    ผังเลือกชั้นวางสินค้า (Shelf Slot Selector)
+                  </h3>
+                  <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '2px 0 0 0', fontWeight: 600 }}>
+                    คลิกเลือกช่องสีเขียวบนผัง 2D เพื่อกำหนดตำแหน่งจัดเก็บสินค้าเข้าสู่คลัง ASRS ({slots.length} ช่อง)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSlotSelector(false)}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  color: '#64748b',
+                  cursor: 'pointer',
+                  fontSize: '1.1rem',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 800,
+                  transition: 'all 0.15s ease'
+                }}
+                title="ปิดหน้าต่าง"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Action Toolbar */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '14px',
+              flexWrap: 'wrap',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleAutoSuggestSlot}
+                  disabled={Boolean(alreadyOccupiedSlot)}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '0.82rem',
+                    color: alreadyOccupiedSlot ? '#94a3b8' : '#0284c7',
+                    borderColor: alreadyOccupiedSlot ? '#cbd5e1' : '#0284c7',
+                    fontWeight: 800,
+                    cursor: alreadyOccupiedSlot ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                >
+                  <Sparkles size={14} /> ✨ แนะนำช่องว่างอัตโนมัติ
+                </button>
+
+                {isManager ? (
+                  <button
+                    type="button"
+                    onClick={() => handleQuickAddSlot(nextSlot)}
+                    disabled={isAddingSlot}
+                    className={`btn btn-primary ${!isAddingSlot ? 'pulse-glow-btn' : ''}`}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      background: 'linear-gradient(135deg, #059669, #10b981)',
+                      borderColor: '#059669',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      cursor: isAddingSlot ? 'wait' : 'pointer'
+                    }}
+                    title={`คลิกเพื่อเพิ่มช่องจัดเก็บ ${nextSlot.slot_code}`}
+                  >
+                    <Plus size={14} /> 
+                    {isAddingSlot ? 'กำลังเพิ่ม...' : `+ เพิ่มช่อง (${nextSlot.slot_code})`}
+                  </button>
+                ) : null}
+              </div>
+
+              {/* Legend */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                background: '#f8fafc',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0'
+              }}>
+                <span style={{ color: '#15803d', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#86efac', display: 'inline-block' }} /> ว่าง (คลิกเลือก)
+                </span>
+                <span style={{ color: '#0284c7', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#0284c7', display: 'inline-block' }} /> กำลังเลือก
+                </span>
+                <span style={{ color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#fca5a5', display: 'inline-block' }} /> มีสินค้า
+                </span>
+              </div>
+            </div>
+
+            {/* 2D Interactive Shelf Grid */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              background: '#f8fafc',
+              padding: '12px',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0'
+            }}>
+              {levels.map(lvl => (
+                <div key={lvl} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{
+                    width: '56px',
+                    textAlign: 'center',
+                    fontSize: '0.85rem',
+                    fontWeight: 900,
+                    color: '#0369a1',
+                    background: '#e0f2fe',
+                    padding: '12px 2px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #7dd3fc',
+                    flexShrink: 0
+                  }}>
+                    ชั้น {lvl}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${bays.length}, 1fr)`, gap: '8px', flex: 1 }}>
+                    {bays.map(bay => {
+                      const slot = slots.find(s => Number(s.level) === lvl && Number(s.bay) === bay);
+                      if (!slot) {
+                        const codeForEmpty = `A-${String(lvl).padStart(2, '0')}-${String(bay).padStart(2, '0')}`;
+                        const isNextTarget = nextSlot.level === lvl && nextSlot.bay === bay;
+                        return (
+                          <div
+                            key={`empty-${lvl}-${bay}`}
+                            onClick={() => {
+                              if (!isManager) {
+                                setMessage({ type: 'error', text: `🔒 จำกัดสิทธิ์: เฉพาะฝ่ายบริหารและฝ่ายวิศวกรรมเท่านั้นที่มีสิทธิ์เพิ่มช่องจัดเก็บ` });
+                                return;
+                              }
+                              if (!isAddingSlot) {
+                                handleQuickAddSlot({
+                                  rack: 'A',
+                                  level: lvl,
+                                  bay: bay,
+                                  slot_code: codeForEmpty
+                                });
+                              }
+                            }}
+                            style={{
+                              padding: '10px 4px',
+                              borderRadius: '8px',
+                              border: isNextTarget ? '2px dashed #0284c7' : '1.5px dashed #cbd5e1',
+                              background: isNextTarget ? '#f0f9ff' : '#ffffff',
+                              minHeight: '62px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: isManager ? 'pointer' : 'default',
+                              color: isNextTarget ? '#0284c7' : '#94a3b8',
+                              fontSize: '0.74rem',
+                              fontWeight: 800,
+                              userSelect: 'none'
+                            }}
+                          >
+                            <Plus size={14} color={isNextTarget ? '#0284c7' : '#94a3b8'} />
+                            <span>+ {codeForEmpty}</span>
+                          </div>
+                        );
+                      }
+
+                      const isSelected = String(slot.slot_id) === String(selectedSlotId);
+                      const isOccupied = slot.is_occupied;
+                      const isTheOccupiedSlot = alreadyOccupiedSlot && alreadyOccupiedSlot.slot_id === slot.slot_id;
+
+                      return (
+                        <div
+                          key={slot.slot_id}
+                          onClick={() => handleSlotClick(slot)}
+                          style={{
+                            padding: '8px 8px',
+                            borderRadius: '8px',
+                            background: isTheOccupiedSlot
+                              ? '#fee2e2'
+                              : isSelected 
+                              ? '#e0f2fe' 
+                              : isOccupied 
+                              ? '#fee2e2' 
+                              : '#dcfce7',
+                            border: `2px solid ${
+                              isTheOccupiedSlot
+                                ? '#ef4444'
+                                : isSelected 
+                                ? '#0284c7' 
+                                : isOccupied 
+                                ? '#fca5a5' 
+                                : '#86efac'
+                            }`,
+                            cursor: 'pointer',
+                            boxShadow: isTheOccupiedSlot 
+                              ? '0 0 0 2px rgba(239, 68, 68, 0.4)' 
+                              : isSelected 
+                              ? '0 0 0 2px rgba(2, 132, 199, 0.4)' 
+                              : 'none',
+                            minHeight: '62px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            textAlign: 'center',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{
+                              fontWeight: 900,
+                              fontSize: '0.82rem',
+                              color: isTheOccupiedSlot ? '#b91c1c' : isSelected ? '#0369a1' : isOccupied ? '#b91c1c' : '#15803d',
+                              fontFamily: 'var(--font-mono)'
+                            }}>
+                              {slot.slot_code}
+                            </span>
+                            <span style={{ fontSize: '0.66rem', color: '#64748b', fontWeight: 700 }}>
+                              {slot.x_axis},{slot.y_axis}
+                            </span>
+                          </div>
+
+                          {isTheOccupiedSlot ? (
+                            <div style={{ color: '#b91c1c', fontWeight: 900, fontSize: '0.72rem' }}>
+                              ⚠️ มีสินค้านี้
+                            </div>
+                          ) : isSelected ? (
+                            <div style={{ color: '#0284c7', fontWeight: 900, fontSize: '0.74rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                              <CheckCircle2 size={13} /> กำลังเลือก
+                            </div>
+                          ) : isOccupied ? (
+                            <div style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              color: '#b91c1c',
+                              background: '#ffffff',
+                              padding: '2px 4px',
+                              borderRadius: '4px',
+                              border: '1px solid #fecdd3',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}>
+                              🔲 {slot.qr_code || 'มีของ'}
+                            </div>
+                          ) : (
+                            <div style={{ color: '#15803d', fontWeight: 700, fontSize: '0.74rem' }}>
+                              ○ ว่าง (คลิก)
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Selected Slot Indicator Status Card */}
+            <div style={{
+              marginTop: '12px',
+              background: alreadyOccupiedSlot 
+                ? '#fee2e2' 
+                : selectedSlot 
+                ? '#dcfce7' 
+                : '#fef3c7',
+              padding: '12px 16px',
+              borderRadius: '12px',
+              border: `1.5px solid ${
+                alreadyOccupiedSlot 
+                  ? '#fca5a5' 
+                  : selectedSlot 
+                  ? '#86efac' 
+                  : '#fde68a'
+              }`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {alreadyOccupiedSlot ? (
+                  <Ban size={20} color="#dc2626" />
+                ) : (
+                  <MapPin size={20} color={selectedSlot ? '#15803d' : '#b45309'} />
+                )}
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: alreadyOccupiedSlot ? '#b91c1c' : selectedSlot ? '#15803d' : '#b45309', fontWeight: 800 }}>
+                    {alreadyOccupiedSlot ? 'สถานะ: มีอยู่ในคลังแล้ว' : selectedSlot ? 'ช่องจัดเก็บที่เลือก:' : 'ยังไม่ได้เลือกช่องจัดเก็บ:'}
+                  </div>
+                  <div style={{ fontSize: '0.96rem', fontWeight: 900, color: '#0f172a' }}>
+                    {alreadyOccupiedSlot 
+                      ? `จัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (ไม่อนุญาตให้เลือกช่องซ้ำ)`
+                      : selectedSlot 
+                      ? `ช่อง ${selectedSlot.slot_code} (ชั้น ${selectedSlot.level}, ช่อง ${selectedSlot.bay})` 
+                      : 'กรุณาคลิกเลือกช่องสีเขียวบนผังด้านบน'}
+                  </div>
+                </div>
+              </div>
+
+              {selectedSlot && !alreadyOccupiedSlot && (
+                <div style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.85rem',
+                  fontWeight: 900,
+                  color: '#0369a1',
+                  background: '#ffffff',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: '1px solid #bae6fd'
+                }}>
+                  X:{selectedSlot.x_axis} | Y:{selectedSlot.y_axis}
+                </div>
+              )}
+            </div>
+
+            {/* Quick Dropdown Alternative */}
+            <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed #cbd5e1' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748b', display: 'block', marginBottom: '4px' }}>
+                หรือเลือกช่องจัดเก็บจากรายการดรอปดาวน์:
+              </label>
+              <select
+                className="form-input"
+                value={selectedSlotId}
+                disabled={Boolean(alreadyOccupiedSlot)}
+                onChange={(e) => {
+                  if (alreadyOccupiedSlot) return;
+                  setSelectedSlotId(e.target.value);
+                  setIsLabelPrinted(false);
+                  const found = slots.find(s => String(s.slot_id) === e.target.value);
+                  if (found) {
+                    setMessage({
+                      type: 'success',
+                      text: `📍 เลือกช่อง ${found.slot_code} (X:${found.x_axis}, Y:${found.y_axis}, Z:${found.z_axis}) เรียบร้อยแล้ว`
+                    });
+                  }
+                }}
+                style={{
+                  borderColor: selectedSlotId ? '#059669' : '#cbd5e1',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  padding: '8px 12px',
+                  background: alreadyOccupiedSlot ? '#f1f5f9' : '#ffffff',
+                  cursor: alreadyOccupiedSlot ? 'not-allowed' : 'pointer'
+                }}
+              >
+                <option value="">{alreadyOccupiedSlot ? '-- ระงับการเลือก (สินค้านี้จัดเก็บในคลังแล้ว) --' : '-- หรือคลิกเลือกจากดรอปดาวน์ --'}</option>
+                {slots.map(s => (
+                  <option key={s.slot_id} value={s.slot_id} disabled={s.is_occupied}>
+                    {s.slot_code} (ชั้น {s.level}, ช่อง {s.bay}) ➔ พิกัด X:{s.x_axis} Y:{s.y_axis} {s.is_occupied ? `❌ [ไม่ว่าง - QR: ${s.qr_code}]` : '✨ [ว่างพร้อมจัดเก็บ]'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Modal Footer Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
+              <button
+                type="button"
+                onClick={() => setShowSlotSelector(false)}
+                className="btn btn-secondary"
+                style={{ padding: '9px 18px', fontSize: '0.9rem', fontWeight: 800 }}
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSlotSelector(false)}
+                disabled={!selectedSlot || Boolean(alreadyOccupiedSlot)}
+                className="btn btn-primary"
+                style={{
+                  padding: '9px 24px',
+                  fontSize: '0.92rem',
+                  fontWeight: 900,
+                  background: (!selectedSlot || alreadyOccupiedSlot)
+                    ? '#94a3b8'
+                    : 'linear-gradient(135deg, #059669, #10b981)',
+                  borderColor: (!selectedSlot || alreadyOccupiedSlot) ? '#cbd5e1' : '#059669',
+                  cursor: (!selectedSlot || alreadyOccupiedSlot) ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Check size={16} /> ยืนยันเลือกช่องนี้และปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Slot Modal */}
       {showAddSlotModal && (
         <div style={{
@@ -2275,7 +2428,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000,
+          zIndex: 2600,
           padding: '16px'
         }}>
           <div className="glass-panel animate-scale-up" style={{
