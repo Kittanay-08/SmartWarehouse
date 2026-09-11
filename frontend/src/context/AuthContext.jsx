@@ -80,7 +80,8 @@ export const ROLE_PERMISSIONS = {
 export const DEFAULT_ACCOUNTS = [
   {
     username: 'admin',
-    password: 'password123',
+    password: '',
+    hasCustomPassword: false,
     name: 'สมชาย จัดการคลัง',
     role: 'admin',
     roleLabel: 'ผู้ดูแลระบบ (Admin)',
@@ -92,7 +93,8 @@ export const DEFAULT_ACCOUNTS = [
   },
   {
     username: 'operator',
-    password: 'password123',
+    password: '',
+    hasCustomPassword: false,
     name: 'กิตติยา สแกนสต็อก',
     role: 'operator',
     roleLabel: 'เจ้าหน้าที่คลังสินค้า (Operator)',
@@ -104,7 +106,8 @@ export const DEFAULT_ACCOUNTS = [
   },
   {
     username: 'engineer',
-    password: 'password123',
+    password: '',
+    hasCustomPassword: false,
     name: 'วิศวกร ซ่อมบำรุง',
     role: 'engineer',
     roleLabel: 'วิศวกรระบบและผังคลัง (Engineer)',
@@ -120,7 +123,16 @@ export const AuthProvider = ({ children }) => {
   const [registeredUsers, setRegisteredUsers] = useState(() => {
     const saved = localStorage.getItem('asrs_registered_users');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { 
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(u => ({
+            ...u,
+            hasCustomPassword: Boolean(u.hasCustomPassword && u.password && u.password !== 'password123'),
+            password: (u.hasCustomPassword && u.password && u.password !== 'password123') ? u.password : ''
+          }));
+        }
+      } catch (e) {}
     }
     return DEFAULT_ACCOUNTS;
   });
@@ -128,7 +140,17 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('asrs_user');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { 
+        const parsed = JSON.parse(saved);
+        if (parsed) {
+          const isCustom = Boolean(parsed.hasCustomPassword && parsed.password && parsed.password !== 'password123');
+          return {
+            ...parsed,
+            hasCustomPassword: isCustom,
+            password: isCustom ? parsed.password : ''
+          };
+        }
+      } catch (e) {}
     }
     return DEFAULT_ACCOUNTS[0];
   });
@@ -136,11 +158,32 @@ export const AuthProvider = ({ children }) => {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
+  const setUserPassword = (username, newPassword) => {
+    const cleanU = (username || '').toLowerCase();
+    const updatedList = (registeredUsers || DEFAULT_ACCOUNTS).map(u => 
+      u.username.toLowerCase() === cleanU 
+        ? { ...u, password: newPassword, hasCustomPassword: true } 
+        : u
+    );
+    setRegisteredUsers(updatedList);
+    localStorage.setItem('asrs_registered_users', JSON.stringify(updatedList));
+
+    if (user?.username?.toLowerCase() === cleanU) {
+      const updatedUser = { ...user, password: newPassword, hasCustomPassword: true };
+      setUser(updatedUser);
+      localStorage.setItem('asrs_user', JSON.stringify(updatedUser));
+    }
+    return { success: true, message: 'ตั้งรหัสผ่านสำเร็จเรียบร้อย' };
+  };
+
   const login = (account) => {
-    setUser(account);
-    localStorage.setItem('asrs_user', JSON.stringify(account));
-    localStorage.setItem('username', account.username);
-    localStorage.setItem('role', account.role);
+    const cleanU = (account?.username || '').toLowerCase();
+    const existing = registeredUsers?.find(u => u.username.toLowerCase() === cleanU);
+    const finalAccount = existing ? { ...existing, ...account } : account;
+    setUser(finalAccount);
+    localStorage.setItem('asrs_user', JSON.stringify(finalAccount));
+    localStorage.setItem('username', finalAccount.username);
+    localStorage.setItem('role', finalAccount.role);
     setIsLoginModalOpen(false);
   };
 
@@ -159,13 +202,18 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateUserProfile = (updatedData) => {
-    const updatedUser = { ...user, ...updatedData };
+    const isUpdatingPassword = Boolean(updatedData.password);
+    const updatedUser = { 
+      ...user, 
+      ...updatedData,
+      ...(isUpdatingPassword ? { hasCustomPassword: true } : {})
+    };
     setUser(updatedUser);
     localStorage.setItem('asrs_user', JSON.stringify(updatedUser));
 
     const updatedList = registeredUsers.map(u => 
       u.username.toLowerCase() === updatedUser.username.toLowerCase() 
-        ? { ...u, ...updatedData } 
+        ? { ...u, ...updatedData, ...(isUpdatingPassword ? { hasCustomPassword: true } : {}) } 
         : u
     );
     setRegisteredUsers(updatedList);
@@ -221,6 +269,7 @@ export const AuthProvider = ({ children }) => {
       login,
       logout,
       registerUser,
+      setUserPassword,
       updateUserProfile,
       registeredUsers,
       isLoginModalOpen,

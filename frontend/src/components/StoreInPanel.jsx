@@ -32,7 +32,9 @@ import {
   Compass,
   Radio,
   Activity,
-  Gauge
+  Gauge,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -79,6 +81,26 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   // 2D Matrix Slot Inspect Modal (for occupied slots)
   const [inspectSlot, setInspectSlot] = useState(null);
 
+  // Live Scanned Product Recognition HUD Info
+  const [scannedProductInfo, setScannedProductInfo] = useState(null);
+
+  // Audio Feedback Beep on Barcode/QR scan (Web Audio API)
+  const playScanBeep = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(920, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.14);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.14);
+    } catch (e) {}
+  };
+
   // Normalize code for comparison
   const normalizeCode = (code) => {
     if (!code) return '';
@@ -99,12 +121,13 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     }
   }, [preSelectedSlot, alreadyOccupiedSlot]);
 
-  // Intelligent QR Code Processor
+  // Intelligent QR Code / 1D Barcode Processor
   // Case 1: Scanning a known product barcode for a NEW box -> Auto-fill details & ALLOW picking an empty slot
-  // Case 2: Scanning a system-printed label of an item ALREADY in a slot -> Show it's already stored & BLOCK re-storing
+  // Case 2: Scanning a system-printed label or barcode of an item ALREADY in a slot -> Show it's already stored & BLOCK re-storing
   const processIncomingQrCode = (inputCode) => {
     if (!inputCode || !inputCode.trim()) {
       setAlreadyOccupiedSlot(null);
+      setScannedProductInfo(null);
       return;
     }
 
@@ -137,24 +160,45 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
     setQrCode(extractedQr);
 
-    // 2. CASE B: Check if this is a System-Printed Label for a slot that is ALREADY OCCUPIED
-    if (isSystemPrintedLabel && extractedSlotCode) {
-      const matchedSlot = slots.find(s => normalizeCode(s.slot_code) === normalizeCode(extractedSlotCode) && s.is_occupied);
-      if (matchedSlot) {
-        setAlreadyOccupiedSlot(matchedSlot);
-        setProductName(matchedSlot.product_name || extractedName || '');
-        setCategory(matchedSlot.category || extractedCat || '');
-        setWeightKg(matchedSlot.weight_kg ? String(matchedSlot.weight_kg) : extractedWeight || '');
-        setLotNumber(matchedSlot.lot_number || extractedLot || generateLotNumber());
-        setSelectedSlotId(''); // Block selecting another slot
-        setIsLabelPrinted(false);
+    // 2. Check if this item is ALREADY OCCUPIED in rack slots
+    const occupiedSlotMatch = slots.find(s => s.is_occupied && (
+      (extractedSlotCode && normalizeCode(s.slot_code) === normalizeCode(extractedSlotCode)) ||
+      (s.qr_code && s.qr_code.trim().toUpperCase() === extractedQr.toUpperCase())
+    ));
 
-        setMessage({
-          type: 'error',
-          text: `🛑 สินค้านี้มีอยู่แล้วในระบบ! จัดเก็บอยู่ที่ช่อง ${matchedSlot.slot_code} (ชั้น ${matchedSlot.level}, ช่อง ${matchedSlot.bay}) ไม่สามารถจัดเก็บซ้ำได้`
-        });
-        return;
-      }
+    if (occupiedSlotMatch) {
+      const occName = occupiedSlotMatch.product_name || extractedName || '';
+      const occCat = occupiedSlotMatch.category || extractedCat || '';
+      const occWeight = occupiedSlotMatch.weight_kg ? String(occupiedSlotMatch.weight_kg) : (extractedWeight || '');
+      const occLot = occupiedSlotMatch.lot_number || extractedLot || generateLotNumber();
+
+      setAlreadyOccupiedSlot(occupiedSlotMatch);
+      setProductName(occName);
+      setCategory(occCat);
+      setWeightKg(occWeight);
+      setLotNumber(occLot);
+      setSelectedSlotId(''); // Block selecting another slot
+      setIsLabelPrinted(false);
+
+      setScannedProductInfo({
+        code: extractedQr,
+        name: occName || 'สินค้าในคลัง',
+        category: occCat || 'ทั่วไป',
+        weight: occWeight || '1.0',
+        lot: occLot || '-',
+        isExisting: true,
+        isOccupied: true,
+        occupiedSlot: occupiedSlotMatch,
+        sourceLabel: `จัดเก็บอยู่ที่ช่อง ${occupiedSlotMatch.slot_code} (ชั้น ${occupiedSlotMatch.level}, ช่อง ${occupiedSlotMatch.bay})`,
+        timestamp: new Date().toLocaleTimeString('th-TH')
+      });
+      playScanBeep();
+
+      setMessage({
+        type: 'error',
+        text: `🛑 สินค้านี้มีอยู่แล้วในระบบ! จัดเก็บอยู่ที่ช่อง ${occupiedSlotMatch.slot_code} (ชั้น ${occupiedSlotMatch.level}, ช่อง ${occupiedSlotMatch.bay}) ไม่สามารถจัดเก็บซ้ำได้`
+      });
+      return;
     }
 
     // 3. CASE A: Scanning product barcode for NEW store-in
@@ -167,6 +211,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     let finalLot = extractedLot || '';
 
     const knownFromCatalog = lookupProduct(extractedQr);
+    const pastLog = transactions.find(t => t.qr_code === extractedQr);
 
     if (extractedName) {
       finalName = extractedName;
@@ -176,14 +221,11 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       finalName = knownFromCatalog.name || '';
       finalCat = knownFromCatalog.category || '';
       finalWeight = knownFromCatalog.weight ? String(knownFromCatalog.weight) : '';
-    } else {
-      const pastLog = transactions.find(t => t.qr_code === extractedQr);
-      if (pastLog) {
-        finalName = pastLog.product_name || '';
-        finalCat = pastLog.category || '';
-        finalWeight = pastLog.weight_kg ? String(pastLog.weight_kg) : '';
-        if (pastLog.lot_number) finalLot = pastLog.lot_number;
-      }
+    } else if (pastLog) {
+      finalName = pastLog.product_name || '';
+      finalCat = pastLog.category || '';
+      finalWeight = pastLog.weight_kg ? String(pastLog.weight_kg) : '';
+      if (pastLog.lot_number) finalLot = pastLog.lot_number;
     }
 
     // Set form fields
@@ -191,6 +233,25 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     setCategory(finalCat);
     setWeightKg(finalWeight);
     setLotNumber(finalLot || lotNumber || generateLotNumber());
+
+    const isRecognized = Boolean(knownFromCatalog || pastLog || extractedName);
+    setScannedProductInfo({
+      code: extractedQr,
+      name: finalName || 'สินค้าใหม่',
+      category: finalCat || 'ยังไม่ระบุหมวดหมู่',
+      weight: finalWeight || '1.0',
+      lot: finalLot || lotNumber || generateLotNumber(),
+      isExisting: isRecognized,
+      isOccupied: false,
+      occupiedSlot: null,
+      sourceLabel: knownFromCatalog 
+        ? 'ฐานข้อมูลสินค้าหลัก (Product Catalog)' 
+        : pastLog 
+          ? 'ประวัติการนำเข้าล่าสุด (Recent Transactions)' 
+          : 'สินค้าใหม่ (พร้อมบันทึก)',
+      timestamp: new Date().toLocaleTimeString('th-TH')
+    });
+    playScanBeep();
 
     // Notify user
     if (finalName) {
@@ -206,7 +267,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     }
   };
 
-  // Real-time input change for QR Code
+  // Real-time input change for QR Code / Barcode (supports physical USB scanner & manual typing)
   const handleQrInputChange = (e) => {
     const val = e.target.value;
     setQrCode(val);
@@ -214,22 +275,85 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     setAlreadyOccupiedSlot(null);
 
     const trimmed = val.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setScannedProductInfo(null);
+      return;
+    }
 
-    // Check if known in catalog
+    // Real-time lookup
+    const occupiedSlotMatch = slots.find(s => s.is_occupied && s.qr_code && s.qr_code.trim().toUpperCase() === trimmed.toUpperCase());
     const known = lookupProduct(trimmed);
-    if (known) {
+    const pastLog = transactions.find(t => t.qr_code === trimmed);
+
+    if (occupiedSlotMatch) {
+      setAlreadyOccupiedSlot(occupiedSlotMatch);
+      setProductName(occupiedSlotMatch.product_name || '');
+      setCategory(occupiedSlotMatch.category || '');
+      setWeightKg(occupiedSlotMatch.weight_kg ? String(occupiedSlotMatch.weight_kg) : '');
+      if (occupiedSlotMatch.lot_number) setLotNumber(occupiedSlotMatch.lot_number);
+      setSelectedSlotId('');
+      setScannedProductInfo({
+        code: trimmed,
+        name: occupiedSlotMatch.product_name || 'สินค้าในคลัง',
+        category: occupiedSlotMatch.category || 'ทั่วไป',
+        weight: occupiedSlotMatch.weight_kg ? String(occupiedSlotMatch.weight_kg) : '1.0',
+        lot: occupiedSlotMatch.lot_number || '-',
+        isExisting: true,
+        isOccupied: true,
+        occupiedSlot: occupiedSlotMatch,
+        sourceLabel: `จัดเก็บอยู่ที่ช่อง ${occupiedSlotMatch.slot_code} (ชั้น ${occupiedSlotMatch.level}, ช่อง ${occupiedSlotMatch.bay})`,
+        timestamp: new Date().toLocaleTimeString('th-TH')
+      });
+      setMessage({
+        type: 'error',
+        text: `🛑 สินค้านี้มีอยู่แล้วในระบบ! จัดเก็บอยู่ที่ช่อง ${occupiedSlotMatch.slot_code}`
+      });
+    } else if (known) {
       setProductName(known.name || '');
       setCategory(known.category || '');
       setWeightKg(known.weight ? String(known.weight) : '');
-    } else {
-      const pastLog = transactions.find(t => t.qr_code === trimmed);
-      if (pastLog) {
-        setProductName(pastLog.product_name || '');
-        setCategory(pastLog.category || '');
-        setWeightKg(pastLog.weight_kg ? String(pastLog.weight_kg) : '');
-        if (pastLog.lot_number) setLotNumber(pastLog.lot_number);
-      }
+      setScannedProductInfo({
+        code: trimmed,
+        name: known.name,
+        category: known.category,
+        weight: known.weight ? String(known.weight) : '1.0',
+        lot: lotNumber || generateLotNumber(),
+        isExisting: true,
+        isOccupied: false,
+        occupiedSlot: null,
+        sourceLabel: 'ฐานข้อมูลสินค้าหลัก (Product Catalog)',
+        timestamp: new Date().toLocaleTimeString('th-TH')
+      });
+    } else if (pastLog) {
+      setProductName(pastLog.product_name || '');
+      setCategory(pastLog.category || '');
+      setWeightKg(pastLog.weight_kg ? String(pastLog.weight_kg) : '');
+      if (pastLog.lot_number) setLotNumber(pastLog.lot_number);
+      setScannedProductInfo({
+        code: trimmed,
+        name: pastLog.product_name,
+        category: pastLog.category,
+        weight: pastLog.weight_kg ? String(pastLog.weight_kg) : '1.0',
+        lot: pastLog.lot_number || '-',
+        isExisting: true,
+        isOccupied: false,
+        occupiedSlot: null,
+        sourceLabel: 'ประวัติการนำเข้าล่าสุด (Recent Inbound)',
+        timestamp: new Date().toLocaleTimeString('th-TH')
+      });
+    } else if (trimmed.length >= 3) {
+      setScannedProductInfo({
+        code: trimmed,
+        name: productName || 'สินค้าใหม่',
+        category: category || 'ทั่วไป',
+        weight: weightKg || '1.0',
+        lot: lotNumber || generateLotNumber(),
+        isExisting: false,
+        isOccupied: false,
+        occupiedSlot: null,
+        sourceLabel: 'สินค้าใหม่ (พร้อมบันทึกเข้าระบบ)',
+        timestamp: new Date().toLocaleTimeString('th-TH')
+      });
     }
   };
 
@@ -270,18 +394,45 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     setLotNumber(log.lot_number || generateLotNumber());
     setSelectedSlotId('');
     setIsLabelPrinted(false);
+
+    setScannedProductInfo({
+      code: log.qr_code || '',
+      name: log.product_name || '',
+      category: log.category || 'ทั่วไป',
+      weight: log.weight_kg ? String(log.weight_kg) : '1.0',
+      lot: log.lot_number || '-',
+      isExisting: true,
+      isOccupied: false,
+      occupiedSlot: null,
+      sourceLabel: 'ดึงข้อมูลจากประวัติการนำเข้าล่าสุด',
+      timestamp: new Date().toLocaleTimeString('th-TH')
+    });
+
     setMessage({
       type: 'success',
       text: `📋 ดึงข้อมูล "${log.product_name}" (ล็อต: ${log.lot_number || '-'}) สำเร็จ! กรุณาคลิกเลือกช่องว่างบนผัง ➔ สั่งพิมพ์ฉลาก ➔ กดยืนยันนำเข้า`
     });
   };
 
-  // Camera QR Scanner Handler
+  // High-Clarity Camera QR & 1D Barcode Scanner Handler
   useEffect(() => {
     if (showCamera) {
       const scanner = new Html5QrcodeScanner('qr-reader-inbound', {
-        fps: 10,
-        qrbox: { width: 240, height: 240 }
+        fps: 25,
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          // Dynamic rectangular box optimized for 1D Barcodes & 2D QR codes
+          const width = Math.floor(Math.min(viewfinderWidth * 0.90, 360));
+          const height = Math.floor(Math.min(viewfinderHeight * 0.65, 200));
+          return { width, height };
+        },
+        aspectRatio: 1.333334,
+        showTorchButtonIfSupported: true,
+        showZoomSliderIfSupported: true,
+        defaultZoomValueIfSupported: 1.5,
+        rememberLastUsedCamera: true,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        }
       });
 
       scanner.render(
@@ -453,6 +604,9 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     const timeDiff = Date.now() - new Date(t.created_at).getTime();
     return timeDiff <= TWELVE_HOURS_MS;
   });
+
+  // State to show 3 recent inbound items initially, expandable with 'ดูเพิ่มเติม'
+  const [historyLimit, setHistoryLimit] = useState(3);
 
   const formatTimeAgo = (dateStr) => {
     const diffMs = Date.now() - new Date(dateStr).getTime();
@@ -772,41 +926,6 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               </button>
             </div>
 
-            {/* 1-Click Demo Barcode Presets for fast demonstration */}
-            <div style={{ marginBottom: '16px', background: '#f0f9ff', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #bae6fd' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 900, color: '#0369a1', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Zap size={14} color="#0284c7" /> สแกนด่วนสินค้าตัวอย่าง (1-Click Demo Presets)
-                </span>
-                <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700 }}>กดเพื่อทดสอบระบบ</span>
-              </div>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {DEMO_PRESETS.map((p, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleApplyPreset(p)}
-                    style={{
-                      background: '#ffffff',
-                      border: '1.5px solid #93c5fd',
-                      borderRadius: '8px',
-                      padding: '6px 10px',
-                      fontSize: '0.78rem',
-                      fontWeight: 800,
-                      color: '#0f172a',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                      boxShadow: '0 1px 3px rgba(2, 132, 199, 0.08)'
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#0284c7'; e.currentTarget.style.background = '#e0f2fe'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#ffffff'; }}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Camera Scanner Viewport with Futuristic Laser HUD */}
             {showCamera && (
               <div className="scanner-crosshairs animate-fade-in" style={{
@@ -835,6 +954,187 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 </div>
                 <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700 }}>
                   🎯 กำลังสแกน... กรุณาเล็งบาร์โค้ดหรือ QR Code ให้อยู่ในกรอบเป้าหมาย
+                </div>
+              </div>
+            )}
+
+            {/* Real-time Scanned Product Recognition HUD Card */}
+            {scannedProductInfo && (
+              <div className="animate-fade-in" style={{
+                background: scannedProductInfo.isOccupied 
+                  ? '#fef2f2' 
+                  : scannedProductInfo.isExisting 
+                    ? '#f0fdf4' 
+                    : '#f0f9ff',
+                border: scannedProductInfo.isOccupied 
+                  ? '2px solid #ef4444' 
+                  : scannedProductInfo.isExisting 
+                    ? '2px solid #22c55e' 
+                    : '2px solid #0284c7',
+                borderRadius: '16px',
+                padding: '16px 18px',
+                marginBottom: '18px',
+                boxShadow: scannedProductInfo.isOccupied 
+                  ? '0 8px 24px rgba(239, 68, 68, 0.15)' 
+                  : scannedProductInfo.isExisting 
+                    ? '0 8px 24px rgba(34, 197, 94, 0.18)' 
+                    : '0 8px 24px rgba(2, 132, 199, 0.18)',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                {/* Header Badge & Close */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '4px 12px',
+                      borderRadius: '12px',
+                      fontSize: '0.82rem',
+                      fontWeight: 800,
+                      background: scannedProductInfo.isOccupied 
+                        ? '#dc2626' 
+                        : scannedProductInfo.isExisting 
+                          ? '#16a34a' 
+                          : '#0284c7',
+                      color: '#ffffff',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+                    }}>
+                      {scannedProductInfo.isOccupied ? (
+                        <>🛑 สินค้านี้มีอยู่แล้วในระบบ</>
+                      ) : scannedProductInfo.isExisting ? (
+                        <>✨ ตรวจพบสินค้าที่มีในระบบ (รู้จักแล้ว)</>
+                      ) : (
+                        <>🆕 บาร์โค้ดสินค้าใหม่ (ยังไม่เคยบันทึก)</>
+                      )}
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700 }}>
+                      🕒 สแกนเมื่อ {scannedProductInfo.timestamp}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setScannedProductInfo(null)}
+                    style={{
+                      border: 'none',
+                      background: '#e2e8f0',
+                      color: '#475569',
+                      padding: '3px 8px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '0.76rem',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    ✕ ปิดการ์ดนี้
+                  </button>
+                </div>
+
+                {/* Product Main Display Grid */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: '12px',
+                  background: '#ffffff',
+                  padding: '14px 16px',
+                  borderRadius: '12px',
+                  border: '1.5px solid',
+                  borderColor: scannedProductInfo.isOccupied 
+                    ? '#fca5a5' 
+                    : scannedProductInfo.isExisting 
+                      ? '#86efac' 
+                      : '#bae6fd',
+                  marginBottom: '12px'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700, marginBottom: '2px' }}>
+                      📦 ชื่อสินค้า (Product Name)
+                    </div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a', lineHeight: 1.25 }}>
+                      {scannedProductInfo.name || 'ยังไม่ระบุชื่อ (กรุณาระบุด้านล่าง)'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700, marginBottom: '2px' }}>
+                      🏷️ หมวดหมู่ (Category)
+                    </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0284c7' }}>
+                      {scannedProductInfo.category === 'Beverages' ? '🥤 เครื่องดื่ม (Beverages)' :
+                       scannedProductInfo.category === 'Electronics' ? '⚡ อุปกรณ์อิเล็กทรอนิกส์ (Electronics)' :
+                       scannedProductInfo.category === 'Snacks' ? '🍿 ขนมขบเคี้ยว (Snacks)' :
+                       scannedProductInfo.category === 'Industrial' ? '⚙️ อะไหล่อุตสาหกรรม (Industrial)' :
+                       scannedProductInfo.category === 'Packaging' ? '📦 บรรจุภัณฑ์ (Packaging)' :
+                       scannedProductInfo.category || 'ทั่วไป (General)'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700, marginBottom: '2px' }}>
+                      🎯 รหัสบาร์โค้ด / QR Code
+                    </div>
+                    <div style={{ fontSize: '1rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: '#1e293b', letterSpacing: '0.04em' }}>
+                      {scannedProductInfo.code}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 700, marginBottom: '2px' }}>
+                      ⚖️ น้ำหนัก / ล็อตจัดเก็บ
+                    </div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#334155' }}>
+                      {scannedProductInfo.weight} กก. • {scannedProductInfo.lot}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Source and Next Action Callout */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: '0.84rem',
+                  fontWeight: 700,
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                  paddingTop: '4px'
+                }}>
+                  <span style={{
+                    color: scannedProductInfo.isOccupied ? '#b91c1c' : '#15803d',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}>
+                    📌 <strong>แหล่งข้อมูล:</strong> {scannedProductInfo.sourceLabel}
+                  </span>
+
+                  {!scannedProductInfo.isOccupied ? (
+                    <span style={{
+                      color: '#0369a1',
+                      background: '#e0f2fe',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      fontWeight: 800
+                    }}>
+                      👉 กรุณาคลิกเลือกช่องว่างบนผังชั้นวาง 2D ด้านขวา
+                    </span>
+                  ) : (
+                    <span style={{
+                      color: '#991b1b',
+                      background: '#fee2e2',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      fontWeight: 800
+                    }}>
+                      ⚠️ มีสินค้านี้จัดเก็บอยู่แล้ว ไม่สามารถจัดเก็บซ้ำได้
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -955,60 +1255,348 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 />
               </div>
 
-              {/* Selected Slot Indicator / Block Indicator */}
+              {/* Embedded Interactive 2D Shelf Matrix for direct slot selection in form */}
               <div style={{
-                background: alreadyOccupiedSlot 
-                  ? '#fee2e2' 
-                  : selectedSlot 
-                  ? '#dcfce7' 
-                  : '#fef3c7',
-                padding: '12px 16px',
-                borderRadius: '10px',
-                border: `1.5px solid ${
-                  alreadyOccupiedSlot 
-                    ? '#fca5a5' 
-                    : selectedSlot 
-                    ? '#86efac' 
-                    : '#fde68a'
-                }`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
+                background: '#f8fafc',
+                padding: '16px',
+                borderRadius: '14px',
+                border: '1.5px solid #bae6fd'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {alreadyOccupiedSlot ? (
-                    <Ban size={18} color="#dc2626" />
-                  ) : (
-                    <MapPin size={18} color={selectedSlot ? '#15803d' : '#b45309'} />
-                  )}
+                {/* Header with Title & Action Buttons */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
                   <div>
-                    <div style={{ fontSize: '0.78rem', color: alreadyOccupiedSlot ? '#b91c1c' : selectedSlot ? '#15803d' : '#b45309', fontWeight: 800 }}>
-                      {alreadyOccupiedSlot ? 'สถานะ: มีอยู่ในคลังแล้ว' : selectedSlot ? 'ช่องจัดเก็บที่เลือก:' : 'ยังไม่ได้เลือกช่องจัดเก็บ:'}
+                    <div style={{ fontSize: '0.92rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Layers size={17} color="#059669" /> ผังชั้นวางสินค้า 2D ({slots.length} ช่อง) *
                     </div>
-                    <div style={{ fontSize: '1rem', fontWeight: 900, color: '#0f172a' }}>
-                      {alreadyOccupiedSlot 
-                        ? `จัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (ไม่อนุญาตให้เลือกช่องซ้ำ)`
-                        : selectedSlot 
-                        ? `ช่อง ${selectedSlot.slot_code} (ชั้น ${selectedSlot.level}, ช่อง ${selectedSlot.bay})` 
-                        : 'กรุณาคลิกเลือกช่องสีเขียวบนผังทางขวา'}
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px', fontWeight: 600 }}>
+                      คลิกเลือกช่องสีเขียวบนผังเพื่อกำหนดตำแหน่งจัดเก็บสินค้า
                     </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={handleAutoSuggestSlot}
+                      disabled={Boolean(alreadyOccupiedSlot)}
+                      className="btn btn-secondary"
+                      style={{
+                        padding: '5px 10px',
+                        fontSize: '0.78rem',
+                        color: alreadyOccupiedSlot ? '#94a3b8' : '#0284c7',
+                        borderColor: alreadyOccupiedSlot ? '#cbd5e1' : '#0284c7',
+                        fontWeight: 800,
+                        cursor: alreadyOccupiedSlot ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <Sparkles size={13} /> แนะนำช่องว่าง
+                    </button>
+
+                    {isManager ? (
+                      <button
+                        type="button"
+                        onClick={() => handleQuickAddSlot(nextSlot)}
+                        disabled={isAddingSlot}
+                        className={`btn btn-primary ${!isAddingSlot ? 'pulse-glow-btn' : ''}`}
+                        style={{
+                          padding: '5px 12px',
+                          fontSize: '0.78rem',
+                          fontWeight: 800,
+                          background: 'linear-gradient(135deg, #059669, #10b981)',
+                          borderColor: '#059669',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          cursor: isAddingSlot ? 'wait' : 'pointer'
+                        }}
+                        title={`คลิกเพื่อเพิ่มช่องจัดเก็บ ${nextSlot.slot_code}`}
+                      >
+                        <Plus size={13} /> 
+                        {isAddingSlot ? 'กำลังเพิ่ม...' : `+ เพิ่มช่อง (${nextSlot.slot_code})`}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
 
-                {selectedSlot && !alreadyOccupiedSlot && (
-                  <div style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '0.85rem',
-                    fontWeight: 900,
-                    color: '#0369a1',
-                    background: '#ffffff',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid #bae6fd'
-                  }}>
-                    X:{selectedSlot.x_axis} | Y:{selectedSlot.y_axis}
+                {/* Compact Legend */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  marginBottom: '10px',
+                  background: '#ffffff',
+                  padding: '6px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  flexWrap: 'wrap'
+                }}>
+                  <span style={{ color: '#15803d', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ width: '9px', height: '9px', borderRadius: '3px', background: '#86efac', display: 'inline-block' }} /> ว่าง (คลิกเลือก)
+                  </span>
+                  <span style={{ color: '#0284c7', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ width: '9px', height: '9px', borderRadius: '3px', background: '#0284c7', display: 'inline-block' }} /> กำลังเลือก
+                  </span>
+                  <span style={{ color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ width: '9px', height: '9px', borderRadius: '3px', background: '#fca5a5', display: 'inline-block' }} /> มีสินค้า
+                  </span>
+                </div>
+
+                {/* 2D Interactive Shelf Grid */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {levels.map(lvl => (
+                    <div key={lvl} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{
+                        width: '52px',
+                        textAlign: 'center',
+                        fontSize: '0.82rem',
+                        fontWeight: 900,
+                        color: '#0369a1',
+                        background: '#e0f2fe',
+                        padding: '10px 2px',
+                        borderRadius: '8px',
+                        border: '1.5px solid #7dd3fc',
+                        flexShrink: 0
+                      }}>
+                        ชั้น {lvl}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${bays.length}, 1fr)`, gap: '6px', flex: 1 }}>
+                        {bays.map(bay => {
+                          const slot = slots.find(s => Number(s.level) === lvl && Number(s.bay) === bay);
+                          if (!slot) {
+                            const codeForEmpty = `A-${String(lvl).padStart(2, '0')}-${String(bay).padStart(2, '0')}`;
+                            const isNextTarget = nextSlot.level === lvl && nextSlot.bay === bay;
+                            return (
+                              <div
+                                key={`empty-${lvl}-${bay}`}
+                                onClick={() => {
+                                  if (!isManager) {
+                                    setMessage({ type: 'error', text: `🔒 จำกัดสิทธิ์: เฉพาะฝ่ายบริหารและฝ่ายวิศวกรรมเท่านั้นที่มีสิทธิ์เพิ่มช่องจัดเก็บ` });
+                                    return;
+                                  }
+                                  if (!isAddingSlot) {
+                                    handleQuickAddSlot({
+                                      rack: 'A',
+                                      level: lvl,
+                                      bay: bay,
+                                      slot_code: codeForEmpty
+                                    });
+                                  }
+                                }}
+                                style={{
+                                  padding: '8px 4px',
+                                  borderRadius: '8px',
+                                  border: isNextTarget ? '2px dashed #0284c7' : '1.5px dashed #cbd5e1',
+                                  background: isNextTarget ? '#f0f9ff' : '#ffffff',
+                                  minHeight: '58px',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: isManager ? 'pointer' : 'default',
+                                  color: isNextTarget ? '#0284c7' : '#94a3b8',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 800,
+                                  userSelect: 'none'
+                                }}
+                              >
+                                <Plus size={13} color={isNextTarget ? '#0284c7' : '#94a3b8'} />
+                                <span>+ {codeForEmpty}</span>
+                              </div>
+                            );
+                          }
+
+                          const isSelected = String(slot.slot_id) === String(selectedSlotId);
+                          const isOccupied = slot.is_occupied;
+                          const isTheOccupiedSlot = alreadyOccupiedSlot && alreadyOccupiedSlot.slot_id === slot.slot_id;
+
+                          return (
+                            <div
+                              key={slot.slot_id}
+                              onClick={() => handleSlotClick(slot)}
+                              style={{
+                                padding: '6px 6px',
+                                borderRadius: '8px',
+                                background: isTheOccupiedSlot
+                                  ? '#fee2e2'
+                                  : isSelected 
+                                  ? '#e0f2fe' 
+                                  : isOccupied 
+                                  ? '#fee2e2' 
+                                  : '#dcfce7',
+                                border: `2px solid ${
+                                  isTheOccupiedSlot
+                                    ? '#ef4444'
+                                    : isSelected 
+                                    ? '#0284c7' 
+                                    : isOccupied 
+                                    ? '#fca5a5' 
+                                    : '#86efac'
+                                }`,
+                                cursor: 'pointer',
+                                boxShadow: isTheOccupiedSlot 
+                                  ? '0 0 0 2px rgba(239, 68, 68, 0.4)' 
+                                  : isSelected 
+                                  ? '0 0 0 2px rgba(2, 132, 199, 0.4)' 
+                                  : 'none',
+                                minHeight: '58px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'space-between',
+                                textAlign: 'center',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{
+                                  fontWeight: 900,
+                                  fontSize: '0.8rem',
+                                  color: isTheOccupiedSlot ? '#b91c1c' : isSelected ? '#0369a1' : isOccupied ? '#b91c1c' : '#15803d',
+                                  fontFamily: 'var(--font-mono)'
+                                }}>
+                                  {slot.slot_code}
+                                </span>
+                                <span style={{ fontSize: '0.66rem', color: '#64748b', fontWeight: 700 }}>
+                                  {slot.x_axis},{slot.y_axis}
+                                </span>
+                              </div>
+
+                              {isTheOccupiedSlot ? (
+                                <div style={{ color: '#b91c1c', fontWeight: 900, fontSize: '0.7rem' }}>
+                                  ⚠️ มีสินค้านี้
+                                </div>
+                              ) : isSelected ? (
+                                <div style={{ color: '#0284c7', fontWeight: 900, fontSize: '0.72rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                                  <CheckCircle2 size={12} /> เลือกช่องนี้
+                                </div>
+                              ) : isOccupied ? (
+                                <div style={{
+                                  fontFamily: 'var(--font-mono)',
+                                  fontSize: '0.68rem',
+                                  fontWeight: 800,
+                                  color: '#b91c1c',
+                                  background: '#ffffff',
+                                  padding: '1px 3px',
+                                  borderRadius: '3px',
+                                  border: '1px solid #fecdd3',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}>
+                                  🔲 {slot.qr_code || 'มีของ'}
+                                </div>
+                              ) : (
+                                <div style={{ color: '#15803d', fontWeight: 700, fontSize: '0.72rem' }}>
+                                  ○ ว่าง (คลิก)
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Selected Slot Indicator Status Badge */}
+                <div style={{
+                  marginTop: '10px',
+                  background: alreadyOccupiedSlot 
+                    ? '#fee2e2' 
+                    : selectedSlot 
+                    ? '#dcfce7' 
+                    : '#fef3c7',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  border: `1.5px solid ${
+                    alreadyOccupiedSlot 
+                      ? '#fca5a5' 
+                      : selectedSlot 
+                      ? '#86efac' 
+                      : '#fde68a'
+                  }`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {alreadyOccupiedSlot ? (
+                      <Ban size={18} color="#dc2626" />
+                    ) : (
+                      <MapPin size={18} color={selectedSlot ? '#15803d' : '#b45309'} />
+                    )}
+                    <div>
+                      <div style={{ fontSize: '0.75rem', color: alreadyOccupiedSlot ? '#b91c1c' : selectedSlot ? '#15803d' : '#b45309', fontWeight: 800 }}>
+                        {alreadyOccupiedSlot ? 'สถานะ: มีอยู่ในคลังแล้ว' : selectedSlot ? 'ช่องจัดเก็บที่เลือก:' : 'ยังไม่ได้เลือกช่องจัดเก็บ:'}
+                      </div>
+                      <div style={{ fontSize: '0.92rem', fontWeight: 900, color: '#0f172a' }}>
+                        {alreadyOccupiedSlot 
+                          ? `จัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (ไม่อนุญาตให้เลือกช่องซ้ำ)`
+                          : selectedSlot 
+                          ? `ช่อง ${selectedSlot.slot_code} (ชั้น ${selectedSlot.level}, ช่อง ${selectedSlot.bay})` 
+                          : 'กรุณาคลิกเลือกช่องสีเขียวบนผังด้านบน'}
+                      </div>
+                    </div>
                   </div>
-                )}
+
+                  {selectedSlot && !alreadyOccupiedSlot && (
+                    <div style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.82rem',
+                      fontWeight: 900,
+                      color: '#0369a1',
+                      background: '#ffffff',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid #bae6fd'
+                    }}>
+                      X:{selectedSlot.x_axis} | Y:{selectedSlot.y_axis}
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Dropdown Alternative */}
+                <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #cbd5e1' }}>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 800, color: '#64748b', display: 'block', marginBottom: '4px' }}>
+                    หรือเลือกช่องจัดเก็บจากรายการดรอปดาวน์:
+                  </label>
+                  <select
+                    className="form-input"
+                    value={selectedSlotId}
+                    disabled={Boolean(alreadyOccupiedSlot)}
+                    onChange={(e) => {
+                      if (alreadyOccupiedSlot) return;
+                      setSelectedSlotId(e.target.value);
+                      setIsLabelPrinted(false);
+                      const found = slots.find(s => String(s.slot_id) === e.target.value);
+                      if (found) {
+                        setMessage({
+                          type: 'success',
+                          text: `📍 เลือกช่อง ${found.slot_code} (X:${found.x_axis}, Y:${found.y_axis}, Z:${found.z_axis}) เรียบร้อยแล้ว`
+                        });
+                      }
+                    }}
+                    style={{
+                      borderColor: selectedSlotId ? '#059669' : '#cbd5e1',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      padding: '6px 10px',
+                      background: alreadyOccupiedSlot ? '#f1f5f9' : '#ffffff',
+                      cursor: alreadyOccupiedSlot ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    <option value="">{alreadyOccupiedSlot ? '-- ระงับการเลือก (สินค้านี้จัดเก็บในคลังแล้ว) --' : '-- หรือคลิกเลือกจากดรอปดาวน์ --'}</option>
+                    {slots.map(s => (
+                      <option key={s.slot_id} value={s.slot_id} disabled={s.is_occupied}>
+                        {s.slot_code} (ชั้น {s.level}, ช่อง {s.bay}) ➔ พิกัด X:{s.x_axis} Y:{s.y_axis} {s.is_occupied ? `❌ [ไม่ว่าง - QR: ${s.qr_code}]` : '✨ [ว่างพร้อมจัดเก็บ]'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Step 2: Print QR Code Button */}
@@ -1082,180 +1670,22 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             </form>
           </div>
 
-          {/* Recent Inbound History (12 Hours) with Quick Re-use Button */}
-          <div className="glass-panel" style={{ padding: '18px', background: '#ffffff', border: '1.5px solid #bae6fd' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <div>
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <History size={18} color="#0284c7" /> ประวัติการนำเข้าล่าสุด (12 ชั่วโมงที่ผ่านมา)
-                </h3>
-                <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px', fontWeight: 600 }}>
-                  💡 คลิกปุ่ม <strong style={{ color: '#0284c7' }}>"ใช้ข้อมูลนี้"</strong> เพื่อก๊อปปี้ข้อมูลสำหรับนำเข้าสินค้ากล่องถัดไปได้ทันที
-                </p>
-              </div>
-              <span className="badge badge-cyan" style={{ fontSize: '0.75rem' }}>
-                {recentInboundLogs.length} รายการ
-              </span>
-            </div>
-
-            {recentInboundLogs.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '16px', color: '#64748b', fontWeight: 600, fontSize: '0.9rem' }}>
-                ยังไม่มีประวัติการนำเข้าในรอบ 12 ชั่วโมงที่ผ่านมา
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '250px', overflowY: 'auto' }}>
-                {recentInboundLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    style={{
-                      background: '#f8fafc',
-                      padding: '10px 14px',
-                      borderRadius: '10px',
-                      border: '1px solid #e2e8f0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '10px',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>
-                        📦 {log.product_name}
-                      </div>
-                      <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '2px', fontWeight: 600 }}>
-                        รหัส: <strong style={{ color: '#0284c7', fontFamily: 'var(--font-mono)' }}>{log.qr_code}</strong> | ช่อง: <strong style={{ color: '#059669' }}>{log.slot_code}</strong> | ล็อต: <strong style={{ color: '#b45309', fontFamily: 'var(--font-mono)' }}>{log.lot_number || '-'}</strong> | น้ำหนัก: {log.weight_kg}kg
-                      </div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <Clock size={11} /> {formatTimeAgo(log.created_at)}
-                      </div>
-                    </div>
-
-                    <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleReuseData(log)}
-                        className="btn btn-secondary"
-                        style={{
-                          padding: '5px 10px',
-                          fontSize: '0.78rem',
-                          fontWeight: 800,
-                          color: '#0284c7',
-                          borderColor: '#0284c7',
-                          background: '#e0f2fe',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          borderRadius: '8px'
-                        }}
-                        title="คลิกเพื่อนำข้อมูลสินค้าชนิดนี้ไปกรอกในฟอร์มสำหรับกล่องถัดไป"
-                      >
-                        <Copy size={12} /> ใช้ข้อมูลนี้
-                      </button>
-                      <span className="badge badge-emerald" style={{ fontSize: '0.68rem' }}>
-                        จัดเก็บแล้ว
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* RIGHT COLUMN: Compact 2D Shelf Matrix with Live HUD & Interactive Filters */}
-        <div className="glass-panel" style={{ padding: '22px', background: '#ffffff', border: '1.5px solid #bae6fd' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
-            <div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Layers size={20} color="#059669" /> ผังชั้นวางสินค้า 2D ({slots.length} ช่อง)
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px', fontWeight: 600 }}>
-                แสดงรหัส QR Code ประจำช่อง — คลิกช่องว่างเพื่อเลือกนำเข้า หรือคลิกช่องที่มีของเพื่อดูข้อมูล
-              </p>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={handleAutoSuggestSlot}
-                disabled={Boolean(alreadyOccupiedSlot)}
-                className="btn btn-secondary"
-                style={{
-                  padding: '7px 14px',
-                  fontSize: '0.82rem',
-                  color: alreadyOccupiedSlot ? '#94a3b8' : '#0284c7',
-                  borderColor: alreadyOccupiedSlot ? '#cbd5e1' : '#0284c7',
-                  fontWeight: 800,
-                  cursor: alreadyOccupiedSlot ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <Sparkles size={14} /> แนะนำช่องว่าง
-              </button>
-
-              {isManager ? (
-                <button
-                  type="button"
-                  onClick={() => handleQuickAddSlot(nextSlot)}
-                  disabled={isAddingSlot}
-                  className={`btn btn-primary ${!isAddingSlot ? 'pulse-glow-btn' : ''}`}
-                  style={{
-                    padding: '7px 16px',
-                    fontSize: '0.84rem',
-                    fontWeight: 800,
-                    background: 'linear-gradient(135deg, #059669, #10b981)',
-                    borderColor: '#059669',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)',
-                    cursor: isAddingSlot ? 'wait' : 'pointer'
-                  }}
-                  title={`คลิกเพื่อเพิ่มช่องจัดเก็บ ${nextSlot.slot_code} ทีละช่อง`}
-                >
-                  <Plus size={15} /> 
-                  {isAddingSlot ? 'กำลังเพิ่มช่อง...' : `+ เพิ่มช่องจัดเก็บ (${nextSlot.slot_code})`}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => alert(`สิทธิ์การใช้งานของ [${deptInfo?.name || 'พนักงานปฏิบัติการ'}]: เฉพาะฝ่ายบริหารและฝ่ายวิศวกรรมเท่านั้นที่มีสิทธิ์เพิ่ม/แก้ไขโครงสร้างช่องจัดเก็บ`)}
-                  className="btn btn-secondary"
-                  style={{
-                    padding: '7px 14px',
-                    fontSize: '0.82rem',
-                    fontWeight: 800,
-                    color: '#64748b',
-                    borderColor: '#cbd5e1',
-                    background: '#f1f5f9',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    cursor: 'pointer'
-                  }}
-                  title="เฉพาะฝ่ายบริหารและฝ่ายวิศวกรรมเท่านั้นที่เพิ่มช่องได้"
-                >
-                  <Lock size={13} color="#64748b" /> เพิ่มช่องจัดเก็บ
-                </button>
-              )}
-            </div>
-          </div>
-
+        {/* RIGHT COLUMN: Live Crane HUD & Recent Inbound History */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {/* Live Crane Telemetry & Travel Distance HUD Bar */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             background: 'linear-gradient(135deg, #0f172a, #1e293b)',
-            padding: '10px 16px',
-            borderRadius: '12px',
+            padding: '12px 18px',
+            borderRadius: '14px',
             color: '#ffffff',
-            marginBottom: '14px',
             boxShadow: '0 4px 15px rgba(15, 23, 42, 0.12)',
             flexWrap: 'wrap',
-            gap: '10px'
+            gap: '12px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{
@@ -1277,9 +1707,9 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>
                   พิกัดเครน AS/RS ปัจจุบัน
                 </div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>
                   X:{craneState.currentX || 1} | Y:{craneState.currentY || 1} | Z:{craneState.currentZ || 1}
-                  <span style={{ marginLeft: '6px', fontSize: '0.72rem', color: craneState.status === 'IDLE' ? '#4ade80' : '#facc15', fontWeight: 800 }}>
+                  <span style={{ marginLeft: '6px', fontSize: '0.74rem', color: craneState.status === 'IDLE' ? '#4ade80' : '#facc15', fontWeight: 800 }}>
                     [{craneState.status || 'IDLE'}]
                   </span>
                 </div>
@@ -1320,377 +1750,120 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             </div>
           </div>
 
-          {/* Interactive Filter & Search Bar */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-            {/* Search Input */}
-            <div style={{ position: 'relative', flex: '1 1 180px', maxWidth: '280px' }}>
-              <Search size={14} color="#64748b" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
-              <input
-                type="text"
-                placeholder="ค้นหารหัสช่อง, สินค้า, QR..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '6px 10px 6px 30px',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  borderRadius: '8px',
-                  border: '1.5px solid #cbd5e1',
-                  outline: 'none',
-                  background: '#f8fafc'
-                }}
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#94a3b8' }}
-                >
-                  <X size={13} />
-                </button>
-              )}
+          {/* Recent Inbound History (12 Hours) with Quick Re-use Button & View More (<= 3 items initially) */}
+          <div className="glass-panel" style={{ padding: '20px', background: '#ffffff', border: '1.5px solid #bae6fd' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <History size={18} color="#0284c7" /> ประวัติการนำเข้าล่าสุด (12 ชั่วโมงที่ผ่านมา)
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px', fontWeight: 600 }}>
+                  💡 คลิกปุ่ม <strong style={{ color: '#0284c7' }}>"ใช้ข้อมูลนี้"</strong> เพื่อคัดลอกข้อมูลสำหรับนำเข้าสินค้ากล่องถัดไปได้ทันที
+                </p>
+              </div>
+              <span className="badge badge-cyan" style={{ fontSize: '0.75rem' }}>
+                แสดง {Math.min(historyLimit, recentInboundLogs.length)} จาก {recentInboundLogs.length} รายการ
+              </span>
             </div>
 
-            {/* Filter Chips */}
-            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-              {[
-                { id: 'all', label: `ทั้งหมด (${slots.length})` },
-                { id: 'empty', label: `🟢 ว่าง (${emptyCount})` },
-                { id: 'occupied', label: `🔴 มีของ (${occupiedCount})` },
-                { id: 'Beverages', label: '🥤 เครื่องดื่ม' },
-                { id: 'Electronics', label: '⚡ อิเล็กทรอนิกส์' },
-                { id: 'Snacks', label: '🥔 ขนม' },
-                { id: 'Parts', label: '⚙️ อะไหล่' },
-              ].map(f => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setRackFilter(f.id)}
-                  style={{
-                    padding: '4px 9px',
-                    fontSize: '0.74rem',
-                    fontWeight: 800,
-                    borderRadius: '6px',
-                    border: rackFilter === f.id ? '1.5px solid #0284c7' : '1px solid #e2e8f0',
-                    background: rackFilter === f.id ? '#e0f2fe' : '#ffffff',
-                    color: rackFilter === f.id ? '#0369a1' : '#64748b',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
+            {recentInboundLogs.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px 16px', color: '#64748b', fontWeight: 600, fontSize: '0.9rem' }}>
+                ยังไม่มีประวัติการนำเข้าในรอบ 12 ชั่วโมงที่ผ่านมา
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {recentInboundLogs.slice(0, historyLimit).map((log) => (
+                    <div
+                      key={log.id}
+                      style={{
+                        background: '#f8fafc',
+                        padding: '12px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid #e2e8f0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a' }}>
+                          📦 {log.product_name}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '3px', fontWeight: 600 }}>
+                          รหัส: <strong style={{ color: '#0284c7', fontFamily: 'var(--font-mono)' }}>{log.qr_code}</strong> | ช่อง: <strong style={{ color: '#059669' }}>{log.slot_code}</strong> | ล็อต: <strong style={{ color: '#b45309', fontFamily: 'var(--font-mono)' }}>{log.lot_number || '-'}</strong> | น้ำหนัก: {log.weight_kg}kg
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <Clock size={11} /> {formatTimeAgo(log.created_at)}
+                        </div>
+                      </div>
 
-          {/* Legend */}
-          <div style={{
-            display: 'flex',
-            gap: '10px',
-            fontSize: '0.76rem',
-            fontWeight: 700,
-            marginBottom: '14px',
-            background: '#f8fafc',
-            padding: '7px 12px',
-            borderRadius: '8px',
-            border: '1px solid #e2e8f0',
-            flexWrap: 'wrap'
-          }}>
-            <span style={{ color: '#15803d', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#86efac', display: 'inline-block' }} /> ว่าง (คลิกเลือก)
-            </span>
-            <span style={{ color: '#0284c7', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#0284c7', display: 'inline-block' }} /> เลือกนำเข้า
-            </span>
-            <span style={{ color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: '#fca5a5', display: 'inline-block' }} /> มีสินค้า (รหัส QR)
-            </span>
-            <span style={{ color: '#0369a1', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '3px', border: '1.5px dashed #0284c7', display: 'inline-block' }} /> ช่องรอเพิ่ม
-            </span>
-          </div>
-
-          {/* Compact Interactive Shelf Grid with QR Code Display */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {levels.map(lvl => (
-              <div key={lvl} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {/* Level badge */}
-                <div style={{
-                  width: '64px',
-                  textAlign: 'center',
-                  fontSize: '0.88rem',
-                  fontWeight: 900,
-                  color: '#0369a1',
-                  background: '#e0f2fe',
-                  padding: '12px 4px',
-                  borderRadius: '8px',
-                  border: '1.5px solid #7dd3fc',
-                  flexShrink: 0
-                }}>
-                  ชั้น {lvl}
-                </div>
-
-                {/* Dynamic Bays */}
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${bays.length}, 1fr)`, gap: '8px', flex: 1 }}>
-                  {bays.map(bay => {
-                    const slot = slots.find(s => Number(s.level) === lvl && Number(s.bay) === bay);
-                    if (!slot) {
-                      const codeForEmpty = `A-${String(lvl).padStart(2, '0')}-${String(bay).padStart(2, '0')}`;
-                      const isNextTarget = nextSlot.level === lvl && nextSlot.bay === bay;
-                      return (
-                        <div
-                          key={`empty-${lvl}-${bay}`}
-                          onClick={() => {
-                            if (!isManager) {
-                              setMessage({ type: 'error', text: `🔒 จำกัดสิทธิ์ [${deptInfo?.name || 'ฝ่ายปฏิบัติการ'}]: เฉพาะฝ่ายบริหารและฝ่ายวิศวกรรมเท่านั้นที่มีสิทธิ์เพิ่มช่องจัดเก็บ` });
-                              return;
-                            }
-                            if (!isAddingSlot) {
-                              handleQuickAddSlot({
-                                rack: 'A',
-                                level: lvl,
-                                bay: bay,
-                                slot_code: codeForEmpty
-                              });
-                            }
-                          }}
+                      <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleReuseData(log)}
+                          className="btn btn-secondary"
                           style={{
-                            padding: '10px 8px',
-                            borderRadius: '10px',
-                            border: isNextTarget ? '2px dashed #0284c7' : '1.5px dashed #cbd5e1',
-                            background: isNextTarget ? '#f0f9ff' : '#f8fafc',
-                            minHeight: '68px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: isManager ? 'pointer' : 'default',
-                            color: isNextTarget ? '#0284c7' : '#94a3b8',
+                            padding: '5px 10px',
                             fontSize: '0.78rem',
                             fontWeight: 800,
-                            userSelect: 'none',
-                            transition: 'all 0.15s ease',
-                            boxShadow: isNextTarget ? '0 2px 8px rgba(2, 132, 199, 0.18)' : 'none'
+                            color: '#0284c7',
+                            borderColor: '#0284c7',
+                            background: '#e0f2fe',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            borderRadius: '8px'
                           }}
-                          title={isManager ? `คลิกเพื่อเพิ่มช่อง ${codeForEmpty} (ชั้น ${lvl}, ช่อง ${bay})` : 'ช่องว่างยังไม่ได้กำหนดในระบบ'}
+                          title="คลิกเพื่อนำข้อมูลสินค้าชนิดนี้ไปกรอกในฟอร์มสำหรับกล่องถัดไป"
                         >
-                          {isManager ? (
-                            <>
-                              <Plus size={15} color={isNextTarget ? '#0284c7' : '#94a3b8'} />
-                              <span style={{ marginTop: '2px', fontWeight: 800 }}>
-                                + {codeForEmpty}
-                              </span>
-                              {isNextTarget && (
-                                <span style={{ fontSize: '0.65rem', color: '#0369a1', background: '#e0f2fe', padding: '1px 6px', borderRadius: '4px', marginTop: '2px', fontWeight: 900 }}>
-                                  คิวถัดไป
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>ช่องยังไม่เปิด</span>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    const isSelected = String(slot.slot_id) === String(selectedSlotId);
-                    const isOccupied = slot.is_occupied;
-                    const isCraneTarget = craneState.targetSlotId === slot.slot_id;
-                    const isTheOccupiedSlot = alreadyOccupiedSlot && alreadyOccupiedSlot.slot_id === slot.slot_id;
-                    const isJustAdded = justAddedSlotId === slot.slot_id;
-
-                    // Filter matching
-                    let passesFilter = true;
-                    if (rackFilter === 'empty' && isOccupied) passesFilter = false;
-                    if (rackFilter === 'occupied' && !isOccupied) passesFilter = false;
-                    if (['Beverages', 'Electronics', 'Snacks', 'Parts'].includes(rackFilter)) {
-                      if (!isOccupied || slot.category !== rackFilter) passesFilter = false;
-                    }
-
-                    // Search matching
-                    let isSearchMatch = false;
-                    if (searchQuery && searchQuery.trim()) {
-                      const q = searchQuery.toLowerCase().trim();
-                      isSearchMatch = (slot.slot_code || '').toLowerCase().includes(q) ||
-                        (slot.product_name || '').toLowerCase().includes(q) ||
-                        (slot.qr_code || '').toLowerCase().includes(q) ||
-                        (slot.lot_number || '').toLowerCase().includes(q);
-                      if (!isSearchMatch) passesFilter = false;
-                    }
-
-                    return (
-                      <div
-                        key={slot.slot_id}
-                        onClick={() => handleSlotClick(slot)}
-                        className={isJustAdded ? 'slot-new-enter' : ''}
-                        title={isOccupied ? `สินค้า: ${slot.product_name} | ล็อต: ${slot.lot_number || '-'} (คลิกดูรายละเอียด)` : `ช่องว่าง: ${slot.slot_code} (คลิกเลือก)`}
-                        style={{
-                          padding: '8px 8px',
-                          borderRadius: '10px',
-                          background: isTheOccupiedSlot
-                            ? '#fee2e2'
-                            : isSelected 
-                            ? '#e0f2fe' 
-                            : isCraneTarget 
-                            ? '#fef3c7' 
-                            : isOccupied 
-                            ? '#fee2e2' 
-                            : '#dcfce7',
-                          border: `2px solid ${
-                            isTheOccupiedSlot
-                              ? '#ef4444'
-                              : isSelected 
-                              ? '#0284c7' 
-                              : isCraneTarget 
-                              ? '#f59e0b' 
-                              : isOccupied 
-                              ? '#fca5a5' 
-                              : '#86efac'
-                          }`,
-                          cursor: 'pointer',
-                          boxShadow: isSearchMatch
-                            ? '0 0 14px rgba(2, 132, 199, 0.5)'
-                            : isTheOccupiedSlot 
-                            ? '0 0 0 3px rgba(239, 68, 68, 0.4)' 
-                            : isSelected 
-                            ? '0 0 0 2.5px rgba(2, 132, 199, 0.3)' 
-                            : 'none',
-                          transform: (isSelected || isTheOccupiedSlot || isSearchMatch) ? 'scale(1.02)' : 'none',
-                          transition: 'all 0.15s ease',
-                          userSelect: 'none',
-                          minHeight: '68px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                          textAlign: 'center',
-                          opacity: passesFilter ? 1 : 0.28,
-                          filter: passesFilter ? 'none' : 'grayscale(60%)'
-                        }}
-                      >
-                        {isJustAdded && (
-                          <div style={{ fontSize: '0.65rem', fontWeight: 900, color: '#059669', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px', marginBottom: '2px', border: '1px solid #86efac' }}>
-                            ✨ เพิ่มใหม่!
-                          </div>
-                        )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{
-                            fontWeight: 900,
-                            fontSize: '0.85rem',
-                            color: isTheOccupiedSlot ? '#b91c1c' : isSelected ? '#0369a1' : isOccupied ? '#b91c1c' : '#15803d',
-                            fontFamily: 'var(--font-mono)'
-                          }}>
-                            {slot.slot_code}
-                          </span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 800 }}>
-                              {slot.x_axis},{slot.y_axis}
-                            </span>
-                            {!slot.is_occupied && isManager && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (window.confirm(`ต้องการลบช่อง ${slot.slot_code} ออกจากระบบใช่หรือไม่?`)) {
-                                    removeSlot(slot.slot_id);
-                                  }
-                                }}
-                                style={{
-                                  background: 'transparent',
-                                  border: 'none',
-                                  color: '#94a3b8',
-                                  cursor: 'pointer',
-                                  padding: '1px 3px',
-                                  borderRadius: '4px',
-                                  lineHeight: 1
-                                }}
-                                title={`ลบช่อง ${slot.slot_code}`}
-                                onMouseOver={(e) => e.currentTarget.style.color = '#ef4444'}
-                                onMouseOut={(e) => e.currentTarget.style.color = '#94a3b8'}
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Display QR Code Number instead of Long Product Name */}
-                        {isTheOccupiedSlot ? (
-                          <div style={{ color: '#b91c1c', fontWeight: 900, fontSize: '0.76rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px', margin: '2px 0' }}>
-                            <AlertTriangle size={13} /> สินค้านี้อยู่ที่นี่
-                          </div>
-                        ) : isSelected ? (
-                          <div style={{ color: '#0284c7', fontWeight: 800, fontSize: '0.78rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px', margin: '2px 0' }}>
-                            <CheckCircle2 size={13} /> เลือกช่องนี้
-                          </div>
-                        ) : isOccupied ? (
-                          <div style={{
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.76rem',
-                            fontWeight: 800,
-                            color: '#b91c1c',
-                            background: '#ffffff',
-                            padding: '2px 4px',
-                            borderRadius: '4px',
-                            border: '1px solid #fecdd3',
-                            margin: '2px 0',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis'
-                          }}>
-                            🔲 {slot.qr_code || 'QR-CODE'}
-                          </div>
-                        ) : (
-                          <div style={{ color: '#15803d', fontWeight: 700, fontSize: '0.78rem', margin: '2px 0' }}>
-                            ○ ว่าง (คลิก)
-                          </div>
-                        )}
+                          <Copy size={12} /> ใช้ข้อมูลนี้
+                        </button>
+                        <span className="badge badge-emerald" style={{ fontSize: '0.68rem' }}>
+                          จัดเก็บแล้ว
+                        </span>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ))}
-          </div>
 
-          {/* Quick Dropdown Alternative */}
-          <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1' }}>
-            <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-              หรือเลือกช่องจัดเก็บจากรายการดรอปดาวน์:
-            </label>
-            <select
-              className="form-input"
-              value={selectedSlotId}
-              disabled={Boolean(alreadyOccupiedSlot)}
-              onChange={(e) => {
-                if (alreadyOccupiedSlot) return;
-                setSelectedSlotId(e.target.value);
-                setIsLabelPrinted(false);
-                const found = slots.find(s => String(s.slot_id) === e.target.value);
-                if (found) {
-                  setMessage({
-                    type: 'success',
-                    text: `📍 เลือกช่อง ${found.slot_code} (X:${found.x_axis}, Y:${found.y_axis}, Z:${found.z_axis}) เรียบร้อยแล้ว`
-                  });
-                }
-              }}
-              style={{
-                borderColor: selectedSlotId ? '#059669' : '#cbd5e1',
-                fontWeight: 700,
-                fontSize: '0.9rem',
-                padding: '8px 12px',
-                background: alreadyOccupiedSlot ? '#f1f5f9' : '#ffffff',
-                cursor: alreadyOccupiedSlot ? 'not-allowed' : 'pointer'
-              }}
-            >
-              <option value="">{alreadyOccupiedSlot ? '-- ระงับการเลือก (สินค้านี้จัดเก็บในคลังแล้ว) --' : '-- กรุณาคลิกเลือกช่องจัดเก็บ --'}</option>
-              {slots.map(s => (
-                <option key={s.slot_id} value={s.slot_id} disabled={s.is_occupied}>
-                  {s.slot_code} (ชั้น {s.level}, ช่อง {s.bay}) ➔ พิกัด X:{s.x_axis} Y:{s.y_axis} {s.is_occupied ? `❌ [ไม่ว่าง - QR: ${s.qr_code}]` : '✨ [ว่างพร้อมจัดเก็บ]'}
-                </option>
-              ))}
-            </select>
+                {/* Show More / Show Less Button if > 3 items */}
+                {recentInboundLogs.length > 3 && (
+                  <div style={{ textAlign: 'center', marginTop: '14px', paddingTop: '10px', borderTop: '1px dashed #cbd5e1' }}>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryLimit(historyLimit >= recentInboundLogs.length ? 3 : recentInboundLogs.length)}
+                      className="btn btn-secondary"
+                      style={{
+                        padding: '8px 18px',
+                        fontSize: '0.85rem',
+                        fontWeight: 800,
+                        color: '#0284c7',
+                        borderColor: '#93c5fd',
+                        background: '#f0f9ff',
+                        borderRadius: '10px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {historyLimit >= recentInboundLogs.length ? (
+                        <>
+                          <ChevronUp size={16} /> ย่อรายการ (แสดง 3 รายการแรก)
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown size={16} /> ดูเพิ่มเติม (แสดงอีก {recentInboundLogs.length - 3} รายการ)
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -66,18 +66,18 @@ export const UserProfileModal = () => {
     }
 
     if (isChangingPassword) {
-      if (!currentPassword) {
-        setMessage({ type: 'error', text: '⚠️ กรุณากรอกรหัสผ่านเดิมเพื่อยืนยันตัวตนก่อนเปลี่ยนรหัสผ่าน' });
-        return;
-      }
-
-      // Check current password strictly against user.password or defaults
-      const actualPassword = user?.password || 'password123';
-      const isCurrentCorrect = currentPassword === actualPassword || currentPassword === 'password123' || currentPassword === '123456';
+      const userHasPassword = Boolean(user?.hasCustomPassword && user?.password);
       
-      if (!isCurrentCorrect) {
-        setMessage({ type: 'error', text: '❌ รหัสผ่านเดิมไม่ถูกต้อง ไม่สามารถตั้งรหัสผ่านใหม่ได้' });
-        return;
+      if (userHasPassword) {
+        if (!currentPassword) {
+          setMessage({ type: 'error', text: '⚠️ กรุณากรอกรหัสผ่านปัจจุบันเพื่อยืนยันตัวตนก่อนเปลี่ยนรหัสผ่าน' });
+          return;
+        }
+
+        if (currentPassword !== user.password) {
+          setMessage({ type: 'error', text: '❌ รหัสผ่านปัจจุบันไม่ถูกต้อง ไม่สามารถเปลี่ยนรหัสผ่านได้' });
+          return;
+        }
       }
 
       if (!newPassword) {
@@ -85,12 +85,12 @@ export const UserProfileModal = () => {
         return;
       }
 
-      if (newPassword.length < 6) {
-        setMessage({ type: 'error', text: 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 6 ตัวอักษร' });
+      if (newPassword.length < 4) {
+        setMessage({ type: 'error', text: 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 4 ตัวอักษร' });
         return;
       }
 
-      if (newPassword === currentPassword) {
+      if (userHasPassword && newPassword === currentPassword) {
         setMessage({ type: 'error', text: '⚠️ รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม' });
         return;
       }
@@ -300,32 +300,17 @@ export const UserProfileModal = () => {
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div>
-              <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                เบอร์โทรศัพท์ (Phone)
-              </label>
-              <input
-                type="text"
-                className="form-input"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="08X-XXX-XXXX"
-              />
-            </div>
-
-            <div>
-              <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                แผนก / สังกัด (Department)
-              </label>
-              <input
-                type="text"
-                className="form-input"
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                placeholder="เช่น คลังสินค้าส่วนกลาง"
-              />
-            </div>
+          <div>
+            <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+              เบอร์โทรศัพท์ (Phone)
+            </label>
+            <input
+              type="text"
+              className="form-input"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="08X-XXX-XXXX"
+            />
           </div>
 
           {/* Change Password Collapsible Section */}
@@ -360,39 +345,53 @@ export const UserProfileModal = () => {
             {isChangingPassword && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '16px' }}>
 
-                {/* 1. Current Password (Strict Requirement) */}
-                <div>
-                  <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                    1. รหัสผ่านเดิม / รหัสผ่านปัจจุบัน (Current Password) *
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type={showCurrentPassword ? 'text' : 'password'}
-                      className="form-input"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      placeholder="กรอกรหัสผ่านปัจจุบันของคุณเพื่อยืนยันตัวตน"
-                      style={{ paddingRight: '42px', borderColor: currentPassword ? '#0284c7' : '#cbd5e1' }}
-                      required={isChangingPassword}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      style={{
-                        position: 'absolute',
-                        right: '12px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none',
-                        border: 'none',
-                        color: '#64748b',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
+                {/* 1. Current Password (Strict Requirement if set) */}
+                {user?.hasCustomPassword && user?.password ? (
+                  <div>
+                    <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                      1. รหัสผ่านเดิม / รหัสผ่านปัจจุบัน (Current Password) *
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showCurrentPassword ? 'text' : 'password'}
+                        className="form-input"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        placeholder="กรอกรหัสผ่านปัจจุบันของคุณเพื่อยืนยันตัวตน"
+                        style={{ paddingRight: '42px', borderColor: currentPassword ? '#0284c7' : '#cbd5e1' }}
+                        required={isChangingPassword}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                        style={{
+                          position: 'absolute',
+                          right: '12px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          color: '#64748b',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    background: '#e0f2fe',
+                    border: '1px solid #7dd3fc',
+                    color: '#0369a1',
+                    fontSize: '0.88rem',
+                    fontWeight: 700
+                  }}>
+                    ℹ️ บัญชีนี้ยังไม่เคยกำหนดรหัสผ่านความปลอดภัย สามารถตั้งรหัสผ่านใหม่ด้านล่างได้ทันที
+                  </div>
+                )}
 
                 {/* 2. New Password */}
                 <div>

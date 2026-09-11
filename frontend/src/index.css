@@ -353,6 +353,56 @@ select.form-input {
   border-bottom-right-radius: 8px;
 }
 
+/* High-Clarity Camera Scanner & HTML5-QRCode Styling */
+#qr-reader-inbound {
+  border: none !important;
+  background: transparent !important;
+}
+
+#qr-reader-inbound video {
+  width: 100% !important;
+  height: auto !important;
+  border-radius: 12px !important;
+  object-fit: cover !important;
+  image-rendering: -webkit-optimize-contrast !important;
+  image-rendering: crisp-edges !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+}
+
+#qr-reader-inbound__scan_region {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+#qr-reader-inbound__dashboard {
+  padding: 10px 0 !important;
+}
+
+#qr-reader-inbound__dashboard_section_csr button,
+#qr-reader-inbound button {
+  background: linear-gradient(135deg, #0284c7, #0369a1) !important;
+  color: #ffffff !important;
+  border: none !important;
+  padding: 8px 16px !important;
+  border-radius: 8px !important;
+  font-weight: 800 !important;
+  font-size: 0.85rem !important;
+  cursor: pointer !important;
+  margin: 4px !important;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3) !important;
+}
+
+#qr-reader-inbound select {
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  border: 1.5px solid #0284c7 !important;
+  font-weight: 700 !important;
+  font-size: 0.85rem !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  margin: 4px !important;
+}
+
 /* Print Styles */
 @media print {
   body * {

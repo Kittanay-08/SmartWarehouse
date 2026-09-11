@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   History, 
   Search, 
@@ -17,7 +17,11 @@ import {
   ShieldAlert,
   Lock,
   ShieldCheck,
-  X
+  X,
+  MoreVertical,
+  Copy,
+  Check,
+  Info
 } from 'lucide-react';
 import { useWarehouse } from '../context/WarehouseContext';
 import { useAuth } from '../context/AuthContext';
@@ -33,6 +37,12 @@ export const TransactionHistory = () => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearMessage, setClearMessage] = useState(null);
   
+  // View More / Pagination state (Default 7 items)
+  const [visibleCount, setVisibleCount] = useState(7);
+  // Transaction detail popup modal state (from 3-dots button ⋮)
+  const [selectedTxDetail, setSelectedTxDetail] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+
   // Date Range States
   const THREE_MONTHS_DAYS = 90;
   const THREE_MONTHS_MS = THREE_MONTHS_DAYS * 24 * 60 * 60 * 1000;
@@ -43,6 +53,11 @@ export const TransactionHistory = () => {
   const [startDate, setStartDate] = useState(threeMonthsAgoStr);
   const [endDate, setEndDate] = useState(todayStr);
   const [datePreset, setDatePreset] = useState('3M'); // 'TODAY', '7D', '30D', '3M', 'CUSTOM'
+
+  // Reset visibleCount to 7 whenever search or filter changes
+  useEffect(() => {
+    setVisibleCount(7);
+  }, [search, filterType, startDate, endDate]);
 
   // Apply Quick Date Presets
   const handleDatePreset = (preset) => {
@@ -125,16 +140,9 @@ export const TransactionHistory = () => {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '22px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <span className="badge badge-emerald">Audit Trail & Compliance</span>
-            <span className="badge badge-cyan">Retention: 3 Months Auto-Purge</span>
-          </div>
           <h2 style={{ fontSize: '1.85rem', fontWeight: 900, color: '#0f172a' }}>
             ประวัติการใช้งานการนำเข้า-ออกสินค้า (Transaction History Logs)
           </h2>
-          <p style={{ color: '#334155', fontSize: '1rem', fontWeight: 600 }}>
-            บันทึกประวัติการทำรายการเรียงลำดับจาก <strong>วันล่าสุดอยู่ด้านบน</strong> (จัดเก็บย้อนหลังสูงสุด 3 เดือน ระบบจะล้างข้อมูลเก่ากว่า 3 เดือนอัตโนมัติ)
-          </p>
         </div>
 
         {/* Actions: Export & Admin-Only Clear History */}
@@ -422,7 +430,7 @@ export const TransactionHistory = () => {
           <thead>
             <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #cbd5e1', color: '#0f172a' }}>
               <th style={{ padding: '14px 16px', fontWeight: 800, width: '60px' }}>#</th>
-              <th style={{ padding: '14px 16px', fontWeight: 800, minWidth: '180px' }}>
+              <th style={{ padding: '14px 16px', fontWeight: 800, minWidth: '170px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Clock size={16} color="#0284c7" /> วันและเวลา (ล่าสุดอยู่บน)
                 </span>
@@ -430,21 +438,18 @@ export const TransactionHistory = () => {
               <th style={{ padding: '14px 16px', fontWeight: 800, minWidth: '120px' }}>ประเภทรายการ</th>
               <th style={{ padding: '14px 16px', fontWeight: 800, minWidth: '110px' }}>ช่องจัดเก็บ (Slot)</th>
               <th style={{ padding: '14px 16px', fontWeight: 800, minWidth: '220px' }}>ชนิดสินค้า (Product)</th>
-              <th style={{ padding: '14px 16px', fontWeight: 800, minWidth: '150px' }}>รหัส QR Code</th>
-              <th style={{ padding: '14px 16px', fontWeight: 800, minWidth: '160px' }}>ผู้ทำรายการ (Operator)</th>
-              <th style={{ padding: '14px 16px', fontWeight: 800, minWidth: '110px' }}>สถานะ</th>
-              <th style={{ padding: '14px 16px', fontWeight: 800, minWidth: '240px' }}>รายละเอียดการทำงาน</th>
+              <th style={{ padding: '14px 16px', fontWeight: 800, width: '120px', textAlign: 'center' }}>รายละเอียด</th>
             </tr>
           </thead>
           <tbody>
             {validAndSortedLogs.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontSize: '1rem', fontWeight: 700 }}>
+                <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontSize: '1rem', fontWeight: 700 }}>
                   ไม่พบรายการประวัติในช่วงวันที่และเงื่อนไขที่ระบุ
                 </td>
               </tr>
             ) : (
-              validAndSortedLogs.map((t, index) => (
+              validAndSortedLogs.slice(0, visibleCount).map((t, index) => (
                 <tr key={t.id} style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.15s' }}>
                   <td style={{ padding: '14px 16px', color: '#64748b', fontWeight: 700 }}>
                     {index + 1}
@@ -479,29 +484,293 @@ export const TransactionHistory = () => {
                       )}
                     </div>
                   </td>
-                  <td style={{ padding: '14px 16px', fontFamily: 'var(--font-mono)', color: '#334155', fontWeight: 800 }}>
-                    {t.qr_code}
-                  </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <div style={{ fontWeight: 800, color: '#0f172a' }}>{t.operator_name}</div>
-                    <div style={{ fontSize: '0.78rem', color: '#059669', textTransform: 'uppercase', fontWeight: 800 }}>
-                      {t.operator_role}
-                    </div>
-                  </td>
-                  <td style={{ padding: '14px 16px' }}>
-                    <span className="badge badge-emerald">
-                      <CheckCircle2 size={14} /> {t.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: '14px 16px', color: '#334155', fontSize: '0.88rem', maxWidth: '340px', fontWeight: 600 }}>
-                    {t.details || '-'}
+                  {/* 3-dots action button to open detail modal */}
+                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTxDetail(t)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        border: '1.5px solid #bae6fd',
+                        background: '#f0f9ff',
+                        color: '#0284c7',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontWeight: 800,
+                        fontSize: '0.84rem',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="คลิกเพื่อดูรายละเอียด (รหัส QR, ผู้ทำรายการ, สถานะ, รายละเอียดการทำงาน)"
+                    >
+                      <MoreVertical size={16} />
+                      <span>ดูข้อมูล</span>
+                    </button>
                   </td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
+
+        {/* Load More Button if logs > 7 */}
+        {validAndSortedLogs.length > 7 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '22px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+            {visibleCount < validAndSortedLogs.length ? (
+              <button
+                type="button"
+                onClick={() => setVisibleCount(prev => prev + 7)}
+                className="btn btn-secondary"
+                style={{
+                  padding: '11px 28px',
+                  fontSize: '0.95rem',
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #f0f9ff, #e0f2fe)',
+                  borderColor: '#0284c7',
+                  color: '#0284c7',
+                  boxShadow: '0 2px 8px rgba(2, 132, 199, 0.12)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <span>ดูเพิ่มเติม (แสดงอีก {Math.min(7, validAndSortedLogs.length - visibleCount)} รายการ) ⬇️</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setVisibleCount(7)}
+                className="btn btn-secondary"
+                style={{
+                  padding: '9px 22px',
+                  fontSize: '0.88rem',
+                  fontWeight: 700,
+                  color: '#64748b',
+                  borderColor: '#cbd5e1',
+                  cursor: 'pointer'
+                }}
+              >
+                <span>ย่อแสดง 7 รายการล่าสุด ⬆️</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Transaction Detail Modal (เปิดจากปุ่ม 3 จุด ⋮) */}
+      {selectedTxDetail && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2500,
+          padding: '20px'
+        }}>
+          <div className="glass-panel animate-fade-in" style={{
+            maxWidth: '560px',
+            width: '100%',
+            padding: '28px',
+            background: '#ffffff',
+            border: '2px solid #bae6fd',
+            borderRadius: '18px',
+            boxShadow: '0 20px 50px rgba(2, 132, 199, 0.2)'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', borderBottom: '1.5px solid #e0f2fe', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, #0284c7, #06b6d4)',
+                  color: '#ffffff',
+                  padding: '8px',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Info size={22} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>
+                    รายละเอียดธุรกรรม
+                  </h3>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600 }}>
+                    รหัสบันทึก: #{selectedTxDetail.id || 'N/A'} • {new Date(selectedTxDetail.created_at).toLocaleString('th-TH')}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedTxDetail(null)}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '34px',
+                  height: '34px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#64748b'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* 4 Items from User Image 3: QR Code, ผู้ทำรายการ, สถานะ, รายละเอียดการทำงาน */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '22px' }}>
+              {/* Product & Slot info */}
+              <div style={{
+                background: '#f0f9ff',
+                border: '1.5px solid #bae6fd',
+                padding: '14px 16px',
+                borderRadius: '12px'
+              }}>
+                <div style={{ fontSize: '0.8rem', color: '#0369a1', fontWeight: 800, marginBottom: '4px' }}>
+                  📦 สินค้าและตำแหน่งช่องจัดเก็บ
+                </div>
+                <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#0f172a' }}>
+                  {selectedTxDetail.product_name}
+                </div>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 900, color: '#0284c7', background: '#ffffff', padding: '2px 8px', borderRadius: '6px', border: '1px solid #7dd3fc', fontSize: '0.85rem' }}>
+                    📍 ช่อง: {selectedTxDetail.slot_code || `Slot #${selectedTxDetail.slot_id}`}
+                  </span>
+                  <span className={`badge ${selectedTxDetail.transaction_type === 'STORE_IN' ? 'badge-emerald' : 'badge-cyan'}`}>
+                    {selectedTxDetail.transaction_type === 'STORE_IN' ? '📥 นำเข้า' : '📤 เบิกจ่าย'}
+                  </span>
+                  {selectedTxDetail.category && (
+                    <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700 }}>
+                      หมวดหมู่: {selectedTxDetail.category}
+                    </span>
+                  )}
+                  {selectedTxDetail.lot_number && (
+                    <span style={{ fontSize: '0.78rem', color: '#b45309', background: '#fef3c7', padding: '1px 6px', borderRadius: '4px', border: '1px solid #fde68a', fontWeight: 800 }}>
+                      ล็อต: {selectedTxDetail.lot_number}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* 1. รหัส QR Code */}
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                padding: '12px 16px',
+                borderRadius: '10px'
+              }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748b', marginBottom: '4px' }}>
+                  🏷️ รหัส QR Code / บาร์โค้ด:
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 900, fontSize: '1.05rem', color: '#0f172a', letterSpacing: '0.04em' }}>
+                    {selectedTxDetail.qr_code || '-'}
+                  </span>
+                  {selectedTxDetail.qr_code && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedTxDetail.qr_code);
+                        setCopiedCode(true);
+                        setTimeout(() => setCopiedCode(false), 2000);
+                      }}
+                      className="btn btn-secondary"
+                      style={{ padding: '4px 10px', fontSize: '0.78rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      {copiedCode ? <Check size={14} color="#15803d" /> : <Copy size={14} />}
+                      <span>{copiedCode ? 'คัดลอกแล้ว' : 'คัดลอก'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. ผู้ทำรายการ (Operator) */}
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                padding: '12px 16px',
+                borderRadius: '10px'
+              }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748b', marginBottom: '4px' }}>
+                  👤 ผู้ทำรายการ (Operator):
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>
+                    {selectedTxDetail.operator_name || 'ไม่ระบุผู้ทำรายการ'}
+                  </span>
+                  {selectedTxDetail.operator_role && (
+                    <span style={{
+                      fontSize: '0.74rem',
+                      textTransform: 'uppercase',
+                      fontWeight: 900,
+                      background: '#dcfce7',
+                      color: '#15803d',
+                      border: '1px solid #86efac',
+                      padding: '2px 8px',
+                      borderRadius: '10px'
+                    }}>
+                      {selectedTxDetail.operator_role}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* 3. สถานะ (Status) */}
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                padding: '12px 16px',
+                borderRadius: '10px'
+              }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748b', marginBottom: '4px' }}>
+                  🔄 สถานะ (Status):
+                </div>
+                <div>
+                  <span className="badge badge-emerald" style={{ fontSize: '0.88rem', padding: '4px 12px' }}>
+                    <CheckCircle2 size={15} /> {selectedTxDetail.status || 'COMPLETED'}
+                  </span>
+                </div>
+              </div>
+
+              {/* 4. รายละเอียดการทำงาน (Work Details) */}
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                padding: '12px 16px',
+                borderRadius: '10px'
+              }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748b', marginBottom: '4px' }}>
+                  📝 รายละเอียดการทำงาน:
+                </div>
+                <div style={{ fontSize: '0.92rem', color: '#334155', fontWeight: 600, lineHeight: 1.5 }}>
+                  {selectedTxDetail.details || 'ไม่มีบันทึกเพิ่มเติม'}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setSelectedTxDetail(null)}
+                className="btn btn-secondary"
+                style={{ padding: '10px 24px', fontWeight: 800, fontSize: '0.95rem' }}
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

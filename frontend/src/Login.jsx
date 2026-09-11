@@ -1,10 +1,73 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Lock, KeyRound, Boxes, User, AlertCircle, CheckCircle2, UserPlus, Mail, ShieldCheck } from 'lucide-react';
+import { Lock, KeyRound, Boxes, User, AlertCircle, CheckCircle2, UserPlus, Mail, ShieldCheck, Check, Sparkles, Package, Wrench, Shield, CheckCircle } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 
 const AVATAR_OPTIONS = ['👨‍💼', '👩‍🔧', '🧑‍💻', '👷‍♂️', '👩‍💼', '🧑‍🔬', '🦾', '📦'];
+
+const ROLE_PLANS = [
+  {
+    id: 'operator',
+    name: 'พนักงานฝ่ายปฏิบัติการ',
+    titleEn: 'Warehouse Operator',
+    icon: '📦',
+    badge: 'แนะนำสำหรับเจ้าหน้าที่คลัง',
+    accentColor: '#0284c7',
+    bgLight: '#f0f9ff',
+    borderActive: '#0284c7',
+    glowColor: 'rgba(2, 132, 199, 0.22)',
+    desc: 'เน้นงานประจำวัน รับเข้า-เบิกจ่าย รวดเร็ว แม่นยำ สแกนและสั่งพิมพ์ฉลากสินค้า',
+    features: [
+      { text: 'สแกน QR / Barcode รับสินค้าเข้าคลัง (Store-In)', allowed: true },
+      { text: 'เบิกจ่ายสินค้าอัตโนมัติผ่านเครน AS/RS (Store-Out)', allowed: true },
+      { text: 'พิมพ์ฉลากบาร์โค้ด & QR สติ๊กเกอร์ (Label Maker)', allowed: true },
+      { text: 'ตรวจสอบสถานะผังชั้นวาง 2D และสต็อกสินค้า', allowed: true },
+      { text: 'เพิ่ม/แก้ไขโครงสร้างแร็คและพิกัดช่องเก็บ', allowed: false, note: 'จำกัดเฉพาะวิศวกร' },
+      { text: 'ลบประวัติ หรือสั่งล้างฐานข้อมูลระบบ', allowed: false, note: 'จำกัดเฉพาะแอดมิน' }
+    ]
+  },
+  {
+    id: 'engineer',
+    name: 'วิศวกรโครงสร้างและ IoT',
+    titleEn: 'AS/RS & IoT Engineer',
+    icon: '🔧',
+    badge: 'สำหรับทีมวิศวกรและเทคนิค',
+    accentColor: '#7c3aed',
+    bgLight: '#f5f3ff',
+    borderActive: '#7c3aed',
+    glowColor: 'rgba(124, 58, 237, 0.22)',
+    desc: 'ออกแบบผังแร็ค ดูแลการทำงานของเครน AS/RS และคอนฟิกบอร์ด IoT ESP32',
+    features: [
+      { text: 'ออกแบบผังและเพิ่มช่องจัดเก็บชั้นวาง (Add/Expand Slots)', allowed: true },
+      { text: 'ควบคุมระบบเครน AS/RS ปรับแต่งพิกัด X, Y, Z', allowed: true },
+      { text: 'มอนิเตอร์ Telemetry และเชื่อมต่อ ESP32 MQTT', allowed: true },
+      { text: 'สแกนและตรวจสอบข้อมูลสินค้าในช่องจัดเก็บ', allowed: true },
+      { text: 'เบิกจ่ายสินค้าใช้งานจริง (Dispatch Outbound)', allowed: false, note: 'โหมดจำลองเท่านั้น' },
+      { text: 'จัดการสิทธิ์ผู้ใช้งานอื่น หรือลบประวัติระบบ', allowed: false, note: 'จำกัดเฉพาะแอดมิน' }
+    ]
+  },
+  {
+    id: 'admin',
+    name: 'ผู้ดูแลระบบสูงสุด',
+    titleEn: 'Super Administrator',
+    icon: '👑',
+    badge: 'สิทธิ์สูงสุด 100% (Full Control)',
+    accentColor: '#059669',
+    bgLight: '#ecfdf5',
+    borderActive: '#059669',
+    glowColor: 'rgba(5, 150, 105, 0.22)',
+    desc: 'ควบคุมและบริหารจัดการทุกระบบอย่างสมบูรณ์แบบ สิทธิ์เต็มทุกฟังก์ชัน',
+    features: [
+      { text: 'เข้าถึงและควบคุมทุกโมดูล 100% ครบวงจร', allowed: true },
+      { text: 'จัดการบัญชีผู้ใช้งาน และสลับสิทธิ์การใช้งาน', allowed: true },
+      { text: 'สั่งการฉุกเฉิน E-Stop และปลดล็อกฮาร์ดแวร์เครน', allowed: true },
+      { text: 'นำเข้า, เบิกจ่าย, เพิ่มช่องแร็ค, คอนฟิก IoT ได้ครบ', allowed: true },
+      { text: 'ลบหรือสำรองข้อมูลประวัติ (Data Purge/Backup)', allowed: true },
+      { text: 'ปรับแต่งระบบเครือข่ายและความปลอดภัย AS/RS', allowed: true }
+    ]
+  }
+];
 
 function Login() {
   const [activeTab, setActiveTab] = useState('login'); // 'login' or 'register'
@@ -338,14 +401,15 @@ function Login() {
       position: 'relative'
     }}>
       <div className="glass-panel animate-fade-in" style={{
-        maxWidth: '490px',
+        maxWidth: activeTab === 'register' ? '1120px' : '490px',
         width: '100%',
-        padding: '40px 36px',
+        padding: activeTab === 'register' ? '36px 28px' : '40px 36px',
         background: '#ffffff',
         border: '1.5px solid #bae6fd',
         boxShadow: '0 20px 45px -10px rgba(2, 132, 199, 0.15)',
         position: 'relative',
-        zIndex: 10
+        zIndex: 10,
+        transition: 'max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease'
       }}>
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
@@ -609,107 +673,327 @@ function Login() {
               </div>
             </div>
 
-            <div>
-              <label style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                ชื่อ-นามสกุล
-              </label>
-              <input 
-                type="text" 
-                placeholder="กรอกชื่อและนามสกุล" 
-                className="form-input"
-                value={regFullName} 
-                onChange={(e) => setRegFullName(e.target.value)} 
-                required
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            {/* Name & Username Inputs (Responsive Grid) */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: '14px'
+            }}>
               <div>
-                <label style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                  ชื่อผู้ใช้งาน
+                <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                  ชื่อ-นามสกุล *
                 </label>
                 <input 
                   type="text" 
-                  placeholder="กรอกชื่อผู้ใช้งาน" 
+                  placeholder="กรอกชื่อและนามสกุล" 
+                  className="form-input"
+                  value={regFullName} 
+                  onChange={(e) => setRegFullName(e.target.value)} 
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                  ชื่อผู้ใช้งาน (Username) *
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="กรอกชื่อผู้ใช้งานสำหรับเข้าสู่ระบบ" 
                   className="form-input"
                   value={regUsername} 
                   onChange={(e) => setRegUsername(e.target.value)} 
                   required
                 />
               </div>
+            </div>
 
+            {/* Email & Passwords (Responsive Grid) */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: '14px'
+            }}>
               <div>
-                <label style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                  ตำแหน่ง / บทบาท
+                <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                  อีเมล (ไม่บังคับ)
                 </label>
-                <select 
+                <input 
+                  type="email" 
+                  placeholder="name@company.com" 
                   className="form-input"
-                  value={regRole}
-                  onChange={(e) => setRegRole(e.target.value)}
-                >
-                  <option value="operator">พนักงานฝ่ายปฏิบัติการ (Operator) - นำเข้า / เบิกจ่าย</option>
-                  <option value="engineer">วิศวกรโครงสร้างคลัง (Engineer) - ขยายแร็ค / IoT</option>
-                  <option value="admin">ผู้ดูแลระบบ (Admin) - สิทธิ์เต็มทุกระบบ</option>
-                </select>
-                <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '4px', fontWeight: 600 }}>
-                  {regRole === 'admin' && '👑 สิทธิ์เต็ม: เพิ่มช่อง, นำเข้า, เบิกจ่าย, ลบประวัติ'}
-                  {regRole === 'operator' && '📦 สิทธิ์ปฏิบัติการ: นำเข้า, เบิกจ่าย (ห้ามเพิ่มช่อง/ห้ามลบประวัติ)'}
-                  {regRole === 'engineer' && '🔧 สิทธิ์วิศวกรรม: เพิ่มช่องจัดเก็บ, คอนฟิก IoT (ห้ามเบิกจ่ายสินค้า)'}
+                  value={regEmail} 
+                  onChange={(e) => setRegEmail(e.target.value)} 
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                    รหัสผ่าน *
+                  </label>
+                  <input 
+                    type="password" 
+                    placeholder="ตั้งรหัสผ่าน" 
+                    className="form-input"
+                    value={regPassword} 
+                    onChange={(e) => setRegPassword(e.target.value)} 
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                    ยืนยันรหัสผ่าน *
+                  </label>
+                  <input 
+                    type="password" 
+                    placeholder="ยืนยันอีกครั้ง" 
+                    className="form-input"
+                    value={regConfirmPassword} 
+                    onChange={(e) => setRegConfirmPassword(e.target.value)} 
+                    required
+                  />
                 </div>
               </div>
             </div>
 
-            <div>
-              <label style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                อีเมล (ไม่บังคับ)
-              </label>
-              <input 
-                type="email" 
-                placeholder="กรอกอีเมลของคุณ" 
-                className="form-input"
-                value={regEmail} 
-                onChange={(e) => setRegEmail(e.target.value)} 
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-              <div>
-                <label style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                  รหัสผ่าน
-                </label>
-                <input 
-                  type="password" 
-                  placeholder="ตั้งรหัสผ่าน" 
-                  className="form-input"
-                  value={regPassword} 
-                  onChange={(e) => setRegPassword(e.target.value)} 
-                  required
-                />
+            {/* Netflix / Gemini Style Role & Permissions Plan Selector */}
+            <div style={{ marginTop: '8px', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '1.08rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Sparkles size={20} color="#0284c7" />
+                    เลือกระดับสิทธิ์และขอบเขตการใช้งาน (Choose Your Access Plan)
+                  </label>
+                  <div style={{ fontSize: '0.84rem', color: '#64748b', fontWeight: 600, marginTop: '2px' }}>
+                    คลิกเลือกการ์ดสิทธิ์ที่ตรงกับหน้าที่ของคุณ (เปรียบเทียบสิทธิ์และข้อจำกัดแบบชัดเจน)
+                  </div>
+                </div>
+                <span style={{ fontSize: '0.8rem', background: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '20px', fontWeight: 800 }}>
+                  📱 รองรับ Phone • iPad • PC
+                </span>
               </div>
 
-              <div>
-                <label style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                  ยืนยันรหัสผ่าน
-                </label>
-                <input 
-                  type="password" 
-                  placeholder="ยืนยันรหัสผ่านอีกครั้ง" 
-                  className="form-input"
-                  value={regConfirmPassword} 
-                  onChange={(e) => setRegConfirmPassword(e.target.value)} 
-                  required
-                />
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))',
+                gap: '16px'
+              }}>
+                {ROLE_PLANS.map((plan) => {
+                  const isSelected = regRole === plan.id;
+                  return (
+                    <div
+                      key={plan.id}
+                      onClick={() => setRegRole(plan.id)}
+                      style={{
+                        position: 'relative',
+                        background: isSelected ? plan.bgLight : '#ffffff',
+                        border: isSelected ? `2.5px solid ${plan.accentColor}` : '2px solid #e2e8f0',
+                        borderRadius: '16px',
+                        padding: '20px 18px',
+                        cursor: 'pointer',
+                        boxShadow: isSelected 
+                          ? `0 12px 28px ${plan.glowColor}, 0 0 0 1px ${plan.accentColor}` 
+                          : '0 4px 12px rgba(0, 0, 0, 0.04)',
+                        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        transform: isSelected ? 'translateY(-3px)' : 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.borderColor = '#94a3b8';
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.08)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.borderColor = '#e2e8f0';
+                          e.currentTarget.style.transform = 'none';
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.04)';
+                        }
+                      }}
+                    >
+                      {/* Top Header: Badge & Radio Check */}
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                          <span style={{
+                            background: isSelected ? plan.accentColor : '#f1f5f9',
+                            color: isSelected ? '#ffffff' : '#475569',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: 800,
+                            letterSpacing: '0.02em',
+                            transition: 'all 0.2s'
+                          }}>
+                            {plan.badge}
+                          </span>
+
+                          <div style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            border: isSelected ? `2px solid ${plan.accentColor}` : '2px solid #cbd5e1',
+                            background: isSelected ? plan.accentColor : '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#ffffff',
+                            transition: 'all 0.2s',
+                            boxShadow: isSelected ? `0 0 8px ${plan.accentColor}` : 'none'
+                          }}>
+                            {isSelected && <Check size={15} strokeWidth={3.5} />}
+                          </div>
+                        </div>
+
+                        {/* Title & Role Info */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
+                          <div style={{
+                            fontSize: '2rem',
+                            width: '48px',
+                            height: '48px',
+                            borderRadius: '12px',
+                            background: isSelected ? '#ffffff' : '#f8fafc',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                            border: `1px solid ${isSelected ? plan.accentColor + '40' : '#e2e8f0'}`
+                          }}>
+                            {plan.icon}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0f172a', lineHeight: 1.2 }}>
+                              {plan.name}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: isSelected ? plan.accentColor : '#64748b', fontWeight: 700 }}>
+                              {plan.titleEn}
+                            </div>
+                          </div>
+                        </div>
+
+                        <p style={{
+                          fontSize: '0.84rem',
+                          color: '#475569',
+                          lineHeight: 1.45,
+                          marginBottom: '14px',
+                          minHeight: '38px'
+                        }}>
+                          {plan.desc}
+                        </p>
+
+                        <div style={{ height: '1px', background: isSelected ? plan.accentColor + '30' : '#e2e8f0', marginBottom: '12px' }} />
+
+                        {/* Permissions Feature Checklist */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {plan.features.map((feat, fIdx) => (
+                            <div key={fIdx} style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '8px',
+                              fontSize: '0.82rem',
+                              color: feat.allowed ? '#1e293b' : '#94a3b8'
+                            }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '50%',
+                                background: feat.allowed ? '#dcfce7' : '#f1f5f9',
+                                color: feat.allowed ? '#16a34a' : '#94a3b8',
+                                fontSize: '0.7rem',
+                                fontWeight: 900,
+                                flexShrink: 0,
+                                marginTop: '1px'
+                              }}>
+                                {feat.allowed ? '✓' : '🔒'}
+                              </span>
+                              <span style={{
+                                fontWeight: feat.allowed ? 600 : 500
+                              }}>
+                                {feat.text}
+                                {feat.note && (
+                                  <span style={{
+                                    marginLeft: '6px',
+                                    fontSize: '0.72rem',
+                                    padding: '1px 6px',
+                                    borderRadius: '6px',
+                                    background: '#f1f5f9',
+                                    color: '#64748b'
+                                  }}>
+                                    ({feat.note})
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Bottom Selection Indicator */}
+                      <div style={{
+                        marginTop: '16px',
+                        paddingTop: '10px',
+                        textAlign: 'center',
+                        borderTop: `1px dashed ${isSelected ? plan.accentColor + '40' : '#f1f5f9'}`
+                      }}>
+                        <span style={{
+                          fontSize: '0.85rem',
+                          fontWeight: 800,
+                          color: isSelected ? plan.accentColor : '#64748b',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}>
+                          {isSelected ? (
+                            <>
+                              <CheckCircle size={16} /> กำลังเลือกสิทธิ์นี้
+                            </>
+                          ) : (
+                            'คลิกเพื่อเลือกสิทธิ์นี้'
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
             <button 
               type="submit" 
               disabled={loading}
-              className="btn btn-success" 
-              style={{ width: '100%', padding: '15px', fontSize: '1.1rem', marginTop: '8px', fontWeight: 900 }}
+              className="btn" 
+              style={{
+                width: '100%',
+                padding: '16px',
+                fontSize: '1.12rem',
+                marginTop: '14px',
+                fontWeight: 900,
+                background: regRole === 'admin' 
+                  ? 'linear-gradient(135deg, #059669, #047857)' 
+                  : regRole === 'engineer' 
+                    ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' 
+                    : 'linear-gradient(135deg, #0284c7, #0369a1)',
+                color: '#ffffff',
+                borderRadius: '12px',
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: '0 6px 20px rgba(0, 0, 0, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                transition: 'all 0.2s'
+              }}
             >
               <UserPlus size={22} />
-              {loading ? 'กำลังบันทึกข้อมูล...' : 'ยืนยันการสมัครสมาชิก (Sign Up)'}
+              {loading ? 'กำลังบันทึกข้อมูล...' : `ยืนยันสมัครสมาชิกด้วยสิทธิ์: ${regRole === 'admin' ? '👑 ผู้ดูแลระบบ (Admin)' : regRole === 'engineer' ? '🔧 วิศวกร (Engineer)' : '📦 พนักงานคลัง (Operator)'}`}
             </button>
 
             {/* Divider */}
