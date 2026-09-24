@@ -8,7 +8,8 @@ import {
   QrCode, 
   Info,
   CheckCircle2,
-  MapPin
+  MapPin,
+  AlertTriangle
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useWarehouse } from '../context/WarehouseContext';
@@ -16,6 +17,7 @@ import { useWarehouse } from '../context/WarehouseContext';
 export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
   const { slots, storeOut, craneState } = useWarehouse();
   const [inspectSlot, setInspectSlot] = useState(null);
+  const [confirmStoreOutSlot, setConfirmStoreOutSlot] = useState(null);
 
   const maxLevel = Math.max(3, ...slots.map(s => Number(s.level) || 1));
   const levels = Array.from({ length: maxLevel }, (_, i) => maxLevel - i);
@@ -258,8 +260,8 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
             <div style={{ display: 'flex', gap: '10px' }}>
               {inspectSlot.is_occupied ? (
                 <button
-                  onClick={async () => {
-                    await storeOut(inspectSlot.slot_id);
+                  onClick={() => {
+                    setConfirmStoreOutSlot(inspectSlot);
                     setInspectSlot(null);
                   }}
                   disabled={craneState.status !== 'IDLE'}
@@ -280,6 +282,129 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
                   <ArrowDownToLine size={18} /> นำสินค้าเข้าช่องนี้
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POP-UP MODAL: ยืนยันการสั่งเบิกจ่ายสินค้า */}
+      {confirmStoreOutSlot && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="card animate-fade-in" style={{
+            maxWidth: '440px',
+            width: '100%',
+            background: '#ffffff',
+            borderRadius: '20px',
+            padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            textAlign: 'center'
+          }}>
+            {/* Confirmation Icon Badge */}
+            <div style={{
+              width: '72px',
+              height: '72px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
+              color: '#d97706',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px auto',
+              boxShadow: '0 8px 20px rgba(217, 119, 6, 0.25)',
+              border: '4px solid #fef3c7'
+            }}>
+              <AlertTriangle size={36} />
+            </div>
+
+            <h3 style={{ fontSize: '1.28rem', fontWeight: 900, color: '#0f172a', marginBottom: '8px' }}>
+              ยืนยันการสั่งเบิกจ่ายสินค้า?
+            </h3>
+            <p style={{ fontSize: '0.92rem', color: '#64748b', marginBottom: '20px', lineHeight: 1.5 }}>
+              คุณต้องการสั่งให้เครน AS/RS ไปดึงสินค้านี้ออกจากช่องจัดเก็บใช่หรือไม่?
+            </p>
+
+            {/* Item Details Summary Card */}
+            <div style={{
+              background: '#f8fafc',
+              borderRadius: '12px',
+              border: '1.5px solid #e2e8f0',
+              padding: '14px 16px',
+              marginBottom: '24px',
+              textAlign: 'left'
+            }}>
+              <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#0f172a', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '3px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 800 }}>
+                  {confirmStoreOutSlot.category || 'General'}
+                </span>
+                <span>{confirmStoreOutSlot.product_name}</span>
+              </div>
+              <div style={{ fontSize: '0.86rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>📍 <strong>ช่องจัดเก็บ:</strong></span>
+                  <span style={{ fontWeight: 800, color: '#0f172a' }}>{confirmStoreOutSlot.slot_code} (ชั้น {confirmStoreOutSlot.level}, ช่อง {confirmStoreOutSlot.bay})</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>🎯 <strong>พิกัด AS/RS:</strong></span>
+                  <span style={{ fontWeight: 800, color: '#0284c7', fontFamily: 'monospace' }}>X:{confirmStoreOutSlot.x_axis} | Y:{confirmStoreOutSlot.y_axis} | Z:{confirmStoreOutSlot.z_axis}</span>
+                </div>
+                {confirmStoreOutSlot.lot_number && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>🔢 <strong>ล็อตสินค้า:</strong></span>
+                    <span style={{ fontWeight: 700, color: '#0f172a' }}>{confirmStoreOutSlot.lot_number}</span>
+                  </div>
+                )}
+                {confirmStoreOutSlot.weight_kg && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>⚖️ <strong>น้ำหนัก:</strong></span>
+                    <span style={{ fontWeight: 800, color: '#0f172a' }}>{confirmStoreOutSlot.weight_kg} kg</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setConfirmStoreOutSlot(null)}
+                className="btn btn-secondary"
+                style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 800 }}
+              >
+                ✕ ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const targetSlot = confirmStoreOutSlot;
+                  setConfirmStoreOutSlot(null);
+                  await storeOut(targetSlot.slot_id);
+                }}
+                className="btn btn-primary"
+                style={{
+                  flex: 1.5,
+                  padding: '12px',
+                  fontSize: '0.95rem',
+                  fontWeight: 900,
+                  background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <ArrowUpFromLine size={18} /> ยืนยันเบิกจ่าย
+              </button>
             </div>
           </div>
         </div>

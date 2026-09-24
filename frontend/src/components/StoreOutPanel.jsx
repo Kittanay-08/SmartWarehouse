@@ -5,6 +5,7 @@ import {
   Package, 
   CheckCircle, 
   AlertCircle,
+  AlertTriangle,
   Lock,
   ShieldAlert,
   Box
@@ -20,6 +21,7 @@ export const StoreOutPanel = () => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [message, setMessage] = useState(null);
+  const [confirmSlot, setConfirmSlot] = useState(null);
 
   const occupiedSlots = slots.filter(s => s.is_occupied);
 
@@ -269,7 +271,14 @@ export const StoreOutPanel = () => {
               <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
                 {isOutboundAllowed ? (
                   <button
-                    onClick={() => handleRetrieve(slot)}
+                    onClick={() => {
+                      if (!isOutboundAllowed) {
+                        setMessage({ type: 'error', text: `🔒 จำกัดสิทธิ์ [${deptInfo?.name || 'ฝ่ายวิศวกรรม'}]: คุณไม่มีสิทธิ์สั่งเบิกจ่ายสินค้า (สงวนสิทธิ์เฉพาะฝ่ายปฏิบัติการและฝ่ายบริหารเท่านั้น)` });
+                        return;
+                      }
+                      if (craneState.status !== 'IDLE') return;
+                      setConfirmSlot(slot);
+                    }}
                     disabled={craneState.status !== 'IDLE'}
                     className="btn btn-primary"
                     style={{ flex: 1, padding: '12px', fontSize: '0.98rem', fontWeight: 800 }}
@@ -304,6 +313,129 @@ export const StoreOutPanel = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* POP-UP MODAL: ยืนยันการสั่งเบิกจ่ายสินค้า */}
+      {confirmSlot && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="card animate-fade-in" style={{
+            maxWidth: '450px',
+            width: '100%',
+            background: '#ffffff',
+            borderRadius: '20px',
+            padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            textAlign: 'center'
+          }}>
+            {/* Confirmation Icon Badge */}
+            <div style={{
+              width: '72px',
+              height: '72px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
+              color: '#d97706',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px auto',
+              boxShadow: '0 8px 20px rgba(217, 119, 6, 0.25)',
+              border: '4px solid #fef3c7'
+            }}>
+              <AlertTriangle size={36} />
+            </div>
+
+            <h3 style={{ fontSize: '1.28rem', fontWeight: 900, color: '#0f172a', marginBottom: '8px' }}>
+              ยืนยันการสั่งเบิกจ่ายสินค้า?
+            </h3>
+            <p style={{ fontSize: '0.92rem', color: '#64748b', marginBottom: '20px', lineHeight: 1.5 }}>
+              คุณต้องการสั่งให้เครน AS/RS ไปดึงสินค้านี้ออกจากช่องจัดเก็บใช่หรือไม่?
+            </p>
+
+            {/* Item Details Summary Card */}
+            <div style={{
+              background: '#f8fafc',
+              borderRadius: '12px',
+              border: '1.5px solid #e2e8f0',
+              padding: '14px 16px',
+              marginBottom: '24px',
+              textAlign: 'left'
+            }}>
+              <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#0f172a', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '3px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 800 }}>
+                  {confirmSlot.category || 'General'}
+                </span>
+                <span>{confirmSlot.product_name}</span>
+              </div>
+              <div style={{ fontSize: '0.86rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>📍 <strong>ช่องจัดเก็บ:</strong></span>
+                  <span style={{ fontWeight: 800, color: '#0f172a' }}>{confirmSlot.slot_code} (ชั้น {confirmSlot.level}, ช่อง {confirmSlot.bay})</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>🎯 <strong>พิกัด AS/RS:</strong></span>
+                  <span style={{ fontWeight: 800, color: '#0284c7', fontFamily: 'monospace' }}>X:{confirmSlot.x_axis} | Y:{confirmSlot.y_axis} | Z:{confirmSlot.z_axis}</span>
+                </div>
+                {confirmSlot.lot_number && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>🔢 <strong>ล็อตสินค้า:</strong></span>
+                    <span style={{ fontWeight: 700, color: '#0f172a' }}>{confirmSlot.lot_number}</span>
+                  </div>
+                )}
+                {confirmSlot.weight_kg && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>⚖️ <strong>น้ำหนัก:</strong></span>
+                    <span style={{ fontWeight: 800, color: '#0f172a' }}>{confirmSlot.weight_kg} kg</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setConfirmSlot(null)}
+                className="btn btn-secondary"
+                style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 800 }}
+              >
+                ✕ ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const targetSlot = confirmSlot;
+                  setConfirmSlot(null);
+                  await handleRetrieve(targetSlot);
+                }}
+                className="btn btn-primary"
+                style={{
+                  flex: 1.5,
+                  padding: '12px',
+                  fontSize: '0.95rem',
+                  fontWeight: 900,
+                  background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <ArrowUpFromLine size={18} /> ยืนยันเบิกจ่าย
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
