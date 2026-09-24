@@ -1345,7 +1345,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
                 {/* Row: Left Slot Status Card + Right Large "เปิดผัง" Button */}
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch', flexWrap: 'wrap' }}>
-                  <div
+                  <button
+                    type="button"
                     onClick={() => {
                       if (!isProductInfoFilled) {
                         setMessage({
@@ -1360,9 +1361,23 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       }
                       setShowSlotSelector(true);
                     }}
+                    disabled={!isProductInfoFilled}
+                    onMouseEnter={(e) => {
+                      if (isProductInfoFilled) {
+                        e.currentTarget.style.borderColor = selectedSlot ? '#16a34a' : '#0284c7';
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(2, 132, 199, 0.15)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (isProductInfoFilled) {
+                        e.currentTarget.style.borderColor = isBlockedByOccupied ? '#ef4444' : selectedSlot ? '#86efac' : '#cbd5e1';
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                      }
+                    }}
                     style={{
                       flex: '1 1 240px',
-                      padding: '12px 16px',
+                      padding: '12px 18px',
+                      minHeight: '52px',
                       borderRadius: '12px',
                       border: !isProductInfoFilled
                         ? '1.5px dashed #cbd5e1'
@@ -1380,15 +1395,16 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                         : '#ffffff',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '10px',
+                      gap: '12px',
                       cursor: !isProductInfoFilled ? 'not-allowed' : 'pointer',
                       boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                      transition: 'all 0.2s ease'
+                      transition: 'all 0.2s ease',
+                      textAlign: 'left'
                     }}
                   >
                     <div style={{
-                      width: '40px',
-                      height: '40px',
+                      width: '38px',
+                      height: '38px',
                       borderRadius: '10px',
                       background: !isProductInfoFilled
                         ? '#e2e8f0'
@@ -1420,28 +1436,29 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       )}
                     </div>
 
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b' }}>
-                        {selectedSlot ? 'ช่องจัดเก็บที่เลือก:' : 'สถานะช่องจัดเก็บ:'}
-                      </div>
-                      <div style={{
-                        fontSize: '0.98rem',
-                        fontWeight: 900,
-                        color: selectedSlot ? '#15803d' : isBlockedByOccupied ? '#991b1b' : '#0f172a',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}>
-                        {!isProductInfoFilled
-                          ? 'กรุณากรอกข้อมูลสินค้าให้ครบก่อน'
-                          : isBlockedByOccupied
-                          ? `มีในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (คลิกเพิ่มสินค้า)`
-                          : selectedSlot
-                          ? `ช่อง ${selectedSlot.slot_code} (ชั้น ${selectedSlot.level}, ช่อง ${selectedSlot.bay})`
-                          : 'ยังไม่ได้เลือกช่องจัดเก็บ'}
-                      </div>
-                    </div>
-                  </div>
+                    <span style={{
+                      fontSize: '1rem',
+                      fontWeight: 800,
+                      color: !isProductInfoFilled
+                        ? '#94a3b8'
+                        : isBlockedByOccupied
+                        ? '#991b1b'
+                        : selectedSlot
+                        ? '#15803d'
+                        : '#0f172a',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {!isProductInfoFilled
+                        ? 'เลือกช่องจัดเก็บสินค้า'
+                        : isBlockedByOccupied
+                        ? `มีในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (คลิกเพิ่มสินค้า)`
+                        : selectedSlot
+                        ? `ช่อง ${selectedSlot.slot_code} (ชั้น ${selectedSlot.level}, ช่อง ${selectedSlot.bay})`
+                        : 'เลือกช่องจัดเก็บสินค้า'}
+                    </span>
+                  </button>
 
                   {/* Right: Big Prominent "เปิดผัง" Button */}
                   <button
