@@ -428,10 +428,10 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     const cleanWeight = String(parsedWeight);
     setWeightKg(cleanWeight);
 
-    if (alreadyOccupiedSlot) {
+    if (isBlockedByOccupied) {
       setMessage({
         type: 'error',
-        text: `🛑 สินค้ารหัสนี้ถูกจัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว ไม่สามารถเลือกช่องเพิ่มได้`
+        text: `🛑 สินค้ารหัสนี้ถูกจัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากด "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม`
       });
       return;
     }
@@ -1048,10 +1048,10 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       )}
 
       {/* Warning Banner when Scanned QR is a System Label of an ALREADY Occupied item */}
-      {alreadyOccupiedSlot && (
+      {alreadyOccupiedSlot && !allowAdditionalStoreIn && (
         <div className="animate-fade-in" style={{
-          background: allowAdditionalStoreIn ? '#fefce8' : '#fee2e2',
-          border: `2px solid ${allowAdditionalStoreIn ? '#f59e0b' : '#ef4444'}`,
+          background: '#fee2e2',
+          border: '2px solid #ef4444',
           borderRadius: '14px',
           padding: '16px 20px',
           marginBottom: '20px',
@@ -1060,13 +1060,11 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '14px',
-          boxShadow: allowAdditionalStoreIn 
-            ? '0 4px 15px rgba(245, 158, 11, 0.12)' 
-            : '0 4px 15px rgba(239, 68, 68, 0.15)'
+          boxShadow: '0 4px 15px rgba(239, 68, 68, 0.15)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <div style={{
-              background: allowAdditionalStoreIn ? '#d97706' : '#dc2626',
+              background: '#dc2626',
               color: '#ffffff',
               borderRadius: '50%',
               width: '42px',
@@ -1076,34 +1074,22 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               justifyContent: 'center',
               flexShrink: 0
             }}>
-              {allowAdditionalStoreIn ? <Plus size={24} /> : <AlertTriangle size={24} />}
+              <AlertTriangle size={24} />
             </div>
             <div>
               <div style={{ 
                 fontWeight: 900, 
                 fontSize: '1.08rem', 
-                color: allowAdditionalStoreIn ? '#92400e' : '#991b1b',
+                color: '#991b1b',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px'
               }}>
                 <span>⚠️ มีสินค้านี้ในคลังอยู่แล้ว! จัดเก็บอยู่ที่ช่อง {alreadyOccupiedSlot.slot_code}</span>
-                {allowAdditionalStoreIn && (
-                  <span style={{
-                    background: '#16a34a',
-                    color: '#fff',
-                    padding: '2px 8px',
-                    borderRadius: '6px',
-                    fontSize: '0.75rem',
-                    fontWeight: 800
-                  }}>
-                    โหมด: เพิ่มสินค้าใหม่ลงช่องว่าง
-                  </span>
-                )}
               </div>
               <div style={{ 
                 fontSize: '0.88rem', 
-                color: allowAdditionalStoreIn ? '#78350f' : '#7f1d1d', 
+                color: '#7f1d1d', 
                 marginTop: '3px', 
                 fontWeight: 700 
               }}>
@@ -1113,49 +1099,34 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            {!allowAdditionalStoreIn ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setAllowAdditionalStoreIn(true);
-                  setLotNumber(generateLotNumber());
-                  setShowSlotSelector(true);
-                  setMessage({
-                    type: 'success',
-                    text: `📦 เปิดให้เพิ่มสินค้า [${alreadyOccupiedSlot.product_name}] เรียบร้อย กรุณาเลือกช่องว่างสำหรับจัดเก็บ`
-                  });
-                }}
-                className="btn btn-primary"
-                style={{
-                  padding: '9px 18px',
-                  fontSize: '0.92rem',
-                  fontWeight: 900,
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  borderColor: '#059669',
-                  boxShadow: '0 3px 10px rgba(16, 185, 129, 0.3)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  color: '#ffffff'
-                }}
-                title="คลิกเพื่อจัดเก็บสินค้าชิ้นนี้เพิ่มลงในช่องว่างอื่น"
-              >
-                <Plus size={18} /> เพิ่มสินค้า
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setAllowAdditionalStoreIn(false);
-                  setSelectedSlotId('');
-                  setIsLabelPrinted(false);
-                }}
-                className="btn btn-secondary"
-                style={{ padding: '8px 14px', fontSize: '0.84rem', fontWeight: 800 }}
-              >
-                ✕ ยกเลิกการเพิ่ม
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                setAllowAdditionalStoreIn(true);
+                setLotNumber(generateLotNumber());
+                setShowSlotSelector(true);
+                setMessage({
+                  type: 'success',
+                  text: `📦 เปิดให้เพิ่มสินค้า [${alreadyOccupiedSlot.product_name}] เรียบร้อย กรุณาเลือกช่องว่างสำหรับจัดเก็บ`
+                });
+              }}
+              className="btn btn-primary"
+              style={{
+                padding: '9px 18px',
+                fontSize: '0.92rem',
+                fontWeight: 900,
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                borderColor: '#059669',
+                boxShadow: '0 3px 10px rgba(16, 185, 129, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                color: '#ffffff'
+              }}
+              title="คลิกเพื่อจัดเก็บสินค้าชิ้นนี้เพิ่มลงในช่องว่างอื่น"
+            >
+              <Plus size={18} /> เพิ่มสินค้า
+            </button>
 
             <button
               type="button"
@@ -1367,7 +1338,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <MapPin size={17} color="#0284c7" /> ช่องจัดเก็บบนชั้นวางสินค้า (Storage Slot) *
                   </label>
-                  {selectedSlot && !alreadyOccupiedSlot && (
+                  {selectedSlot && !isBlockedByOccupied && (
                     <span style={{
                       fontSize: '0.8rem',
                       fontWeight: 800,
