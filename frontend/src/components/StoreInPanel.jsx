@@ -1343,124 +1343,163 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   )}
                 </div>
 
-                {/* The Requested Button: "เลือกช่องจัดเก็บ" (Pop-up Modal Trigger) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!isProductInfoFilled) {
-                      setMessage({
-                        type: 'error',
-                        text: '⚠️ จำเป็นต้องกรอกข้อมูลสินค้า (รหัส QR/บาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะสามารถเลือกช่องจัดเก็บได้'
-                      });
-                      return;
-                    }
-                    if (isBlockedByOccupied) {
-                      setAllowAdditionalStoreIn(true);
-                      setLotNumber(generateLotNumber());
-                    }
-                    setShowSlotSelector(true);
-                  }}
-                  className="btn"
-                  style={{
-                    width: '100%',
-                    padding: '13px 18px',
-                    fontSize: '1rem',
-                    fontWeight: 900,
-                    background: !isProductInfoFilled
-                      ? '#f8fafc'
-                      : isBlockedByOccupied
-                      ? '#fee2e2'
-                      : selectedSlot 
-                        ? 'linear-gradient(135deg, #059669, #047857)' 
-                        : 'linear-gradient(135deg, #0284c7, #0369a1)',
-                    color: !isProductInfoFilled
-                      ? '#64748b'
-                      : isBlockedByOccupied ? '#991b1b' : '#ffffff',
-                    borderRadius: '12px',
-                    border: !isProductInfoFilled
-                      ? '2px dashed #cbd5e1'
-                      : isBlockedByOccupied ? '2px solid #ef4444' : 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '8px',
-                    boxShadow: (!isProductInfoFilled || isBlockedByOccupied) ? 'none' : '0 4px 14px rgba(2, 132, 199, 0.22)',
-                    cursor: !isProductInfoFilled ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s ease',
-                    opacity: !isProductInfoFilled ? 0.9 : 1
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                    {!isProductInfoFilled ? (
-                      <Lock size={20} color="#64748b" />
-                    ) : (
-                      <Layers size={20} />
-                    )}
-                    <span>เลือกช่องจัดเก็บ</span>
-                    {!isProductInfoFilled ? (
-                      <span style={{
-                        background: '#fee2e2',
-                        color: '#b91c1c',
-                        padding: '3px 10px',
-                        borderRadius: '8px',
-                        fontSize: '0.82rem',
-                        fontWeight: 800,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}>
-                        🔒 ต้องกรอกข้อมูลสินค้าก่อน
-                      </span>
-                    ) : isBlockedByOccupied ? (
-                      <span style={{
-                        background: '#dc2626',
-                        color: '#fff',
-                        padding: '3px 10px',
-                        borderRadius: '8px',
-                        fontSize: '0.82rem',
-                        fontWeight: 800
-                      }}>
-                        🛑 มีในช่อง {alreadyOccupiedSlot.slot_code} แล้ว (คลิกเพื่อเพิ่มสินค้า)
-                      </span>
-                    ) : selectedSlot ? (
-                      <span style={{
-                        background: 'rgba(255, 255, 255, 0.25)',
-                        padding: '3px 10px',
-                        borderRadius: '8px',
-                        fontSize: '0.92rem',
+                {/* Row: Left Slot Status Card + Right Large "เปิดผัง" Button */}
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch', flexWrap: 'wrap' }}>
+                  <div
+                    onClick={() => {
+                      if (!isProductInfoFilled) {
+                        setMessage({
+                          type: 'error',
+                          text: '⚠️ จำเป็นต้องกรอกข้อมูลสินค้า (รหัส QR/บาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะสามารถเลือกช่องจัดเก็บได้'
+                        });
+                        return;
+                      }
+                      if (isBlockedByOccupied) {
+                        setAllowAdditionalStoreIn(true);
+                        setLotNumber(generateLotNumber());
+                      }
+                      setShowSlotSelector(true);
+                    }}
+                    style={{
+                      flex: '1 1 240px',
+                      padding: '12px 16px',
+                      borderRadius: '12px',
+                      border: !isProductInfoFilled
+                        ? '1.5px dashed #cbd5e1'
+                        : isBlockedByOccupied
+                        ? '1.5px solid #ef4444'
+                        : selectedSlot
+                        ? '1.5px solid #86efac'
+                        : '1.5px solid #cbd5e1',
+                      background: !isProductInfoFilled
+                        ? '#f8fafc'
+                        : isBlockedByOccupied
+                        ? '#fee2e2'
+                        : selectedSlot
+                        ? '#f0fdf4'
+                        : '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      cursor: !isProductInfoFilled ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '10px',
+                      background: !isProductInfoFilled
+                        ? '#e2e8f0'
+                        : isBlockedByOccupied
+                        ? '#dc2626'
+                        : selectedSlot
+                        ? '#16a34a'
+                        : '#e0f2fe',
+                      color: !isProductInfoFilled
+                        ? '#64748b'
+                        : isBlockedByOccupied
+                        ? '#ffffff'
+                        : selectedSlot
+                        ? '#ffffff'
+                        : '#0284c7',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      {!isProductInfoFilled ? (
+                        <Lock size={19} color="#64748b" />
+                      ) : isBlockedByOccupied ? (
+                        <Ban size={19} color="#ffffff" />
+                      ) : selectedSlot ? (
+                        <CheckCircle2 size={19} color="#ffffff" />
+                      ) : (
+                        <MapPin size={19} color="#0284c7" />
+                      )}
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b' }}>
+                        {selectedSlot ? 'ช่องจัดเก็บที่เลือก:' : 'สถานะช่องจัดเก็บ:'}
+                      </div>
+                      <div style={{
+                        fontSize: '0.98rem',
                         fontWeight: 900,
-                        letterSpacing: '0.02em'
+                        color: selectedSlot ? '#15803d' : isBlockedByOccupied ? '#991b1b' : '#0f172a',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
                       }}>
-                        ช่อง {selectedSlot.slot_code} (ชั้น {selectedSlot.level}, ช่อง {selectedSlot.bay})
-                      </span>
-                    ) : (
-                      <span style={{
-                        background: 'rgba(255, 255, 255, 0.2)',
-                        padding: '3px 10px',
-                        borderRadius: '8px',
-                        fontSize: '0.82rem',
-                        fontWeight: 700
-                      }}>
-                        (คลิกเพื่อเปิดผังเลือกชั้นวาง)
-                      </span>
-                    )}
+                        {!isProductInfoFilled
+                          ? 'กรุณากรอกข้อมูลสินค้าให้ครบก่อน'
+                          : isBlockedByOccupied
+                          ? `มีในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (คลิกเพิ่มสินค้า)`
+                          : selectedSlot
+                          ? `ช่อง ${selectedSlot.slot_code} (ชั้น ${selectedSlot.level}, ช่อง ${selectedSlot.bay})`
+                          : 'ยังไม่ได้เลือกช่องจัดเก็บ'}
+                      </div>
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.86rem', fontWeight: 800 }}>
-                    {!isProductInfoFilled ? (
-                      <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>ระบุข้อมูลสินค้าก่อน ➔</span>
-                    ) : (
-                      <>
-                        <span>{selectedSlot ? 'เปลี่ยนช่อง' : 'เปิดผัง 2D'}</span>
-                        <Sparkles size={16} />
-                      </>
-                    )}
-                  </div>
-                </button>
+                  {/* Right: Big Prominent "เปิดผัง" Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isProductInfoFilled) {
+                        setMessage({
+                          type: 'error',
+                          text: '⚠️ จำเป็นต้องกรอกข้อมูลสินค้า (รหัส QR/บาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะสามารถเลือกช่องจัดเก็บได้'
+                        });
+                        return;
+                      }
+                      if (isBlockedByOccupied) {
+                        setAllowAdditionalStoreIn(true);
+                        setLotNumber(generateLotNumber());
+                      }
+                      setShowSlotSelector(true);
+                    }}
+                    disabled={!isProductInfoFilled}
+                    className="btn btn-primary"
+                    style={{
+                      padding: '13px 30px',
+                      fontSize: '1.08rem',
+                      fontWeight: 900,
+                      background: !isProductInfoFilled
+                        ? '#cbd5e1'
+                        : selectedSlot
+                        ? 'linear-gradient(135deg, #059669, #10b981)'
+                        : 'linear-gradient(135deg, #0284c7, #0369a1)',
+                      borderColor: !isProductInfoFilled
+                        ? '#cbd5e1'
+                        : selectedSlot
+                        ? '#059669'
+                        : '#0284c7',
+                      boxShadow: !isProductInfoFilled
+                        ? 'none'
+                        : selectedSlot
+                        ? '0 4px 16px rgba(16, 185, 129, 0.35)'
+                        : '0 4px 16px rgba(2, 132, 199, 0.35)',
+                      borderRadius: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      cursor: !isProductInfoFilled ? 'not-allowed' : 'pointer',
+                      color: '#ffffff',
+                      flexShrink: 0,
+                      minWidth: '155px'
+                    }}
+                    title="เปิดแผนผังแร็คคลังสินค้าเพื่อเลือกช่องจัดเก็บ"
+                  >
+                    <Layers size={22} />
+                    <span>เปิดผัง</span>
+                  </button>
+                </div>
 
-                {/* Status or Information Card below the button */}
-                {!isProductInfoFilled ? (
+                {/* Helper / Warning when incomplete */}
+                {!isProductInfoFilled && (
                   <div style={{
                     fontSize: '0.82rem',
                     color: '#b45309',
@@ -1474,52 +1513,9 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                     fontWeight: 700
                   }}>
                     <AlertCircle size={15} color="#d97706" />
-                    <span>จำเป็นต้องกรอกข้อมูลสินค้า (รหัสบาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะสามารถเลือกช่องจัดเก็บได้</span>
+                    <span>จำเป็นต้องกรอกข้อมูลสินค้า (รหัสบาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะสามารถเปิดผังเลือกช่องจัดเก็บได้</span>
                   </div>
-                ) : selectedSlot && !isBlockedByOccupied ? (
-                  <div style={{
-                    background: '#f0fdf4',
-                    border: '1.5px solid #86efac',
-                    borderRadius: '10px',
-                    padding: '10px 14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontSize: '0.88rem'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#15803d', fontWeight: 800 }}>
-                      <CheckCircle2 size={18} color="#15803d" />
-                      <div>
-                        <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 700 }}>ช่องจัดเก็บบนชั้นวางที่เลือก:</div>
-                        <div style={{ fontSize: '0.98rem', fontWeight: 900, color: '#0f172a' }}>
-                          ช่อง {selectedSlot.slot_code} (ชั้น {selectedSlot.level}, ช่อง {selectedSlot.bay})
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '0.82rem',
-                        color: '#0369a1',
-                        fontWeight: 800,
-                        background: '#e0f2fe',
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        border: '1px solid #bae6fd'
-                      }}>
-                        X:{selectedSlot.x_axis} | Y:{selectedSlot.y_axis}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setShowSlotSelector(true)}
-                        className="btn btn-secondary"
-                        style={{ padding: '4px 10px', fontSize: '0.78rem', fontWeight: 800 }}
-                      >
-                        เปลี่ยนช่อง
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
+                )}
               </div>
 
               {/* Step 2: Print QR Code Button */}
