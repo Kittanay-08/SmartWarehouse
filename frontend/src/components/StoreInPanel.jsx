@@ -129,10 +129,6 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       if (!isBlockedByOccupied && isProductInfoFilled) {
         setSelectedSlotId(String(preSelectedSlot.slot_id));
         setIsLabelPrinted(false);
-        setMessage({
-          type: 'success',
-          text: `📍 เลือกช่อง ${preSelectedSlot.slot_code} (ชั้น ${preSelectedSlot.level}, ช่อง ${preSelectedSlot.bay}) เรียบร้อยแล้ว`
-        });
       }
     }
   }, [preSelectedSlot, isBlockedByOccupied, isProductInfoFilled]);
@@ -493,10 +489,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     const sorted = [...emptySlots].sort((a, b) => a.level - b.level || a.bay - b.bay);
     setSelectedSlotId(String(sorted[0].slot_id));
     setIsLabelPrinted(false);
-    setMessage({ 
-      type: 'success', 
-      text: `✨ แนะนำช่อง ${sorted[0].slot_code} (ระดับชั้น ${sorted[0].level} ช่องที่ ${sorted[0].bay})` 
-    });
+    setMessage(null);
   };
 
   // Re-use data from recent inbound item
@@ -591,10 +584,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
     setSelectedSlotId(String(slot.slot_id));
     setIsLabelPrinted(false);
-    setMessage({
-      type: 'success',
-      text: `✅ คุณได้เลือกช่องจัดเก็บ: ${slot.slot_code} (ชั้น ${slot.level}, ช่อง ${slot.bay}) พิกัด X:${slot.x_axis} Y:${slot.y_axis} Z:${slot.z_axis}`
-    });
+    setMessage(null);
   };
 
   // Structured QR Code Payload for Label Generation
@@ -1105,10 +1095,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 setAllowAdditionalStoreIn(true);
                 setLotNumber(generateLotNumber());
                 setShowSlotSelector(true);
-                setMessage({
-                  type: 'success',
-                  text: `📦 เปิดให้เพิ่มสินค้า [${alreadyOccupiedSlot.product_name}] เรียบร้อย กรุณาเลือกช่องว่างสำหรับจัดเก็บ`
-                });
+                setMessage(null);
               }}
               className="btn btn-primary"
               style={{
@@ -2497,13 +2484,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   if (isBlockedByOccupied) return;
                   setSelectedSlotId(e.target.value);
                   setIsLabelPrinted(false);
-                  const found = slots.find(s => String(s.slot_id) === e.target.value);
-                  if (found) {
-                    setMessage({
-                      type: 'success',
-                      text: `📍 เลือกช่อง ${found.slot_code} (X:${found.x_axis}, Y:${found.y_axis}, Z:${found.z_axis}) เรียบร้อยแล้ว`
-                    });
-                  }
+                  setMessage(null);
                 }}
                 style={{
                   borderColor: selectedSlotId ? '#059669' : '#cbd5e1',
