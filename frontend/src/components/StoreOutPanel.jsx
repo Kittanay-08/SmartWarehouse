@@ -355,12 +355,9 @@ export const StoreOutPanel = () => {
               <AlertTriangle size={36} />
             </div>
 
-            <h3 style={{ fontSize: '1.28rem', fontWeight: 900, color: '#0f172a', marginBottom: '8px' }}>
+            <h3 style={{ fontSize: '1.28rem', fontWeight: 900, color: '#0f172a', marginBottom: '18px' }}>
               ยืนยันการสั่งเบิกจ่ายสินค้า?
             </h3>
-            <p style={{ fontSize: '0.92rem', color: '#64748b', marginBottom: '20px', lineHeight: 1.5 }}>
-              คุณต้องการสั่งให้เครน AS/RS ไปดึงสินค้านี้ออกจากช่องจัดเก็บใช่หรือไม่?
-            </p>
 
             {/* Item Details Summary Card */}
             <div style={{
