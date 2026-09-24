@@ -76,6 +76,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   
   // Duplicate / Already Occupied Detection (For system-assigned QR labels)
   const [alreadyOccupiedSlot, setAlreadyOccupiedSlot] = useState(null);
+  const [allowAdditionalStoreIn, setAllowAdditionalStoreIn] = useState(false);
+  const isBlockedByOccupied = Boolean(alreadyOccupiedSlot) && !allowAdditionalStoreIn;
 
   // Mandatory Label Printing Flow
   const [isLabelPrinted, setIsLabelPrinted] = useState(false);
@@ -124,7 +126,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   // Sync when preSelectedSlot prop changes (only if product info is already provided)
   useEffect(() => {
     if (preSelectedSlot && preSelectedSlot.slot_id) {
-      if (!alreadyOccupiedSlot && isProductInfoFilled) {
+      if (!isBlockedByOccupied && isProductInfoFilled) {
         setSelectedSlotId(String(preSelectedSlot.slot_id));
         setIsLabelPrinted(false);
         setMessage({
@@ -133,7 +135,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
         });
       }
     }
-  }, [preSelectedSlot, alreadyOccupiedSlot, isProductInfoFilled]);
+  }, [preSelectedSlot, isBlockedByOccupied, isProductInfoFilled]);
 
   // Clear slot selection if product info becomes incomplete
   useEffect(() => {
@@ -208,36 +210,25 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       const occLot = occupiedSlotMatch.lot_number || extractedLot || generateLotNumber();
 
       setAlreadyOccupiedSlot(occupiedSlotMatch);
+      setAllowAdditionalStoreIn(false);
       setProductName(occName);
       setCategory(occCat);
       setWeightKg(occWeight);
       setLotNumber(occLot);
-      setSelectedSlotId(''); // Block selecting another slot
+      setSelectedSlotId(''); // Clear previous slot selection so user picks new empty slot
       setIsLabelPrinted(false);
-
-      setScannedProductInfo({
-        code: extractedQr,
-        name: occName || 'สินค้าในคลัง',
-        category: occCat || 'ทั่วไป',
-        weight: occWeight || '1.0',
-        lot: occLot || '-',
-        isExisting: true,
-        isOccupied: true,
-        occupiedSlot: occupiedSlotMatch,
-        sourceLabel: `จัดเก็บอยู่ที่ช่อง ${occupiedSlotMatch.slot_code} (ชั้น ${occupiedSlotMatch.level}, ช่อง ${occupiedSlotMatch.bay})`,
-        timestamp: new Date().toLocaleTimeString('th-TH')
-      });
       playScanBeep();
 
       setMessage({
-        type: 'error',
-        text: `🛑 สินค้านี้มีอยู่แล้วในระบบ! จัดเก็บอยู่ที่ช่อง ${occupiedSlotMatch.slot_code} (ชั้น ${occupiedSlotMatch.level}, ช่อง ${occupiedSlotMatch.bay}) ไม่สามารถจัดเก็บซ้ำได้`
+        type: 'warning',
+        text: `⚠️ ตรวจพบสินค้านี้ในคลังแล้ว (จัดเก็บอยู่ที่ช่อง ${occupiedSlotMatch.slot_code}) สามารถคลิกปุ่ม "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่มลงช่องว่างใหม่ได้`
       });
       return;
     }
 
     // 3. CASE A: Scanning product barcode for NEW store-in
     setAlreadyOccupiedSlot(null);
+    setAllowAdditionalStoreIn(false);
 
     // Look up known product from persistent self-learning catalog or past transactions
     let finalName = '';
@@ -491,8 +482,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       });
       return;
     }
-    if (alreadyOccupiedSlot) {
-      setMessage({ type: 'error', text: `⚠️ สินค้าชิ้นนี้จัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว ไม่สามารถเลือกช่องเพิ่มได้` });
+    if (isBlockedByOccupied) {
+      setMessage({ type: 'warning', text: `⚠️ สินค้าชิ้นนี้มีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากดปุ่ม "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม` });
       return;
     }
     if (emptySlots.length === 0) {
@@ -511,6 +502,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   // Re-use data from recent inbound item
   const handleReuseData = (log) => {
     setAlreadyOccupiedSlot(null);
+    setAllowAdditionalStoreIn(false);
     setProductName(log.product_name || '');
     setQrCode(log.qr_code || '');
     setCategory(log.category || '');
@@ -589,10 +581,10 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       return;
     }
 
-    if (alreadyOccupiedSlot) {
+    if (isBlockedByOccupied) {
       setMessage({
-        type: 'error',
-        text: `🛑 ฉลากสินค้านี้จัดเก็บอยู่ที่ช่อง ${alreadyOccupiedSlot.slot_code} แล้ว! ไม่สามารถจัดเก็บซ้ำได้`
+        type: 'warning',
+        text: `⚠️ สินค้านี้มีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากดปุ่ม "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม`
       });
       return;
     }
@@ -626,8 +618,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
   // Action: Print Label
   const handlePrintLabel = () => {
-    if (alreadyOccupiedSlot) {
-      setMessage({ type: 'error', text: `🛑 สินค้านี้จัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว ไม่สามารถพิมพ์ฉลากจัดเก็บซ้ำได้` });
+    if (isBlockedByOccupied) {
+      setMessage({ type: 'warning', text: `⚠️ สินค้านี้มีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากดปุ่ม "เพิ่มสินค้า" ก่อนพิมพ์ฉลาก` });
       return;
     }
     if (!productName.trim()) {
@@ -734,10 +726,10 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (alreadyOccupiedSlot) {
+    if (isBlockedByOccupied) {
       setMessage({
-        type: 'error',
-        text: `🛑 ไม่สามารถนำเข้าได้! สินค้ารหัสนี้ถูกจัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} เรียบร้อยแล้ว`
+        type: 'warning',
+        text: `⚠️ สินค้ารหัสนี้มีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากดปุ่ม "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม`
       });
       return;
     }
@@ -791,6 +783,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       setWeightKg('');
       setSelectedSlotId('');
       setAlreadyOccupiedSlot(null);
+      setAllowAdditionalStoreIn(false);
       setLotNumber(generateLotNumber());
       setIsLabelPrinted(false);
 
@@ -1057,21 +1050,23 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       {/* Warning Banner when Scanned QR is a System Label of an ALREADY Occupied item */}
       {alreadyOccupiedSlot && (
         <div className="animate-fade-in" style={{
-          background: '#fee2e2',
-          border: '2px solid #ef4444',
+          background: allowAdditionalStoreIn ? '#fefce8' : '#fee2e2',
+          border: `2px solid ${allowAdditionalStoreIn ? '#f59e0b' : '#ef4444'}`,
           borderRadius: '14px',
-          padding: '18px 22px',
+          padding: '16px 20px',
           marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '14px',
-          boxShadow: '0 4px 15px rgba(239, 68, 68, 0.15)'
+          boxShadow: allowAdditionalStoreIn 
+            ? '0 4px 15px rgba(245, 158, 11, 0.12)' 
+            : '0 4px 15px rgba(239, 68, 68, 0.15)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <div style={{
-              background: '#dc2626',
+              background: allowAdditionalStoreIn ? '#d97706' : '#dc2626',
               color: '#ffffff',
               borderRadius: '50%',
               width: '42px',
@@ -1081,26 +1076,103 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               justifyContent: 'center',
               flexShrink: 0
             }}>
-              <Ban size={24} />
+              {allowAdditionalStoreIn ? <Plus size={24} /> : <AlertTriangle size={24} />}
             </div>
             <div>
-              <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#991b1b' }}>
-                🛑 สินค้านี้มีอยู่แล้วในระบบ! จัดเก็บอยู่ที่ช่อง {alreadyOccupiedSlot.slot_code}
+              <div style={{ 
+                fontWeight: 900, 
+                fontSize: '1.08rem', 
+                color: allowAdditionalStoreIn ? '#92400e' : '#991b1b',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span>⚠️ มีสินค้านี้ในคลังอยู่แล้ว! จัดเก็บอยู่ที่ช่อง {alreadyOccupiedSlot.slot_code}</span>
+                {allowAdditionalStoreIn && (
+                  <span style={{
+                    background: '#16a34a',
+                    color: '#fff',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    fontSize: '0.75rem',
+                    fontWeight: 800
+                  }}>
+                    โหมด: เพิ่มสินค้าใหม่ลงช่องว่าง
+                  </span>
+                )}
               </div>
-              <div style={{ fontSize: '0.9rem', color: '#7f1d1d', marginTop: '2px', fontWeight: 700 }}>
-                ชื่อสินค้า: <strong>{alreadyOccupiedSlot.product_name}</strong> | ล็อต: <strong>{alreadyOccupiedSlot.lot_number || '-'}</strong> | ช่อง: <strong>{alreadyOccupiedSlot.slot_code}</strong> (ชั้น {alreadyOccupiedSlot.level}, ช่อง {alreadyOccupiedSlot.bay})
+              <div style={{ 
+                fontSize: '0.88rem', 
+                color: allowAdditionalStoreIn ? '#78350f' : '#7f1d1d', 
+                marginTop: '3px', 
+                fontWeight: 700 
+              }}>
+                ชื่อสินค้า: <strong>{alreadyOccupiedSlot.product_name}</strong> | ล็อตเดิม: <strong>{alreadyOccupiedSlot.lot_number || '-'}</strong> | ช่องเดิม: <strong>{alreadyOccupiedSlot.slot_code}</strong> (ชั้น {alreadyOccupiedSlot.level}, ช่อง {alreadyOccupiedSlot.bay})
               </div>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setInspectSlot(alreadyOccupiedSlot)}
-            className="btn btn-primary"
-            style={{ padding: '8px 16px', fontSize: '0.9rem', fontWeight: 800 }}
-          >
-            <Info size={16} /> ดูข้อมูลช่องนี้ / สั่งเบิกจ่าย
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {!allowAdditionalStoreIn ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setAllowAdditionalStoreIn(true);
+                  setLotNumber(generateLotNumber());
+                  setShowSlotSelector(true);
+                  setMessage({
+                    type: 'success',
+                    text: `📦 เปิดให้เพิ่มสินค้า [${alreadyOccupiedSlot.product_name}] เรียบร้อย กรุณาเลือกช่องว่างสำหรับจัดเก็บ`
+                  });
+                }}
+                className="btn btn-primary"
+                style={{
+                  padding: '9px 18px',
+                  fontSize: '0.92rem',
+                  fontWeight: 900,
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  borderColor: '#059669',
+                  boxShadow: '0 3px 10px rgba(16, 185, 129, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: '#ffffff'
+                }}
+                title="คลิกเพื่อจัดเก็บสินค้าชิ้นนี้เพิ่มลงในช่องว่างอื่น"
+              >
+                <Plus size={18} /> เพิ่มสินค้า
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setAllowAdditionalStoreIn(false);
+                  setSelectedSlotId('');
+                  setIsLabelPrinted(false);
+                }}
+                className="btn btn-secondary"
+                style={{ padding: '8px 14px', fontSize: '0.84rem', fontWeight: 800 }}
+              >
+                ✕ ยกเลิกการเพิ่ม
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setInspectSlot(alreadyOccupiedSlot)}
+              className="btn btn-secondary"
+              style={{
+                padding: '9px 16px',
+                fontSize: '0.88rem',
+                fontWeight: 800,
+                background: '#ffffff',
+                color: '#0369a1',
+                borderColor: '#bae6fd'
+              }}
+            >
+              <Info size={16} /> ดูข้อมูลช่องนี้ / สั่งเบิกจ่าย
+            </button>
+          </div>
         </div>
       )}
 
@@ -1177,8 +1249,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   onKeyDown={handleQrKeyDown}
                   style={{
                     fontFamily: 'var(--font-mono)',
-                    borderColor: alreadyOccupiedSlot ? '#ef4444' : '#0284c7',
-                    background: alreadyOccupiedSlot ? '#fef2f2' : '#ffffff'
+                    borderColor: isBlockedByOccupied ? '#f59e0b' : '#0284c7',
+                    background: isBlockedByOccupied ? '#fffbeb' : '#ffffff'
                   }}
                   required
                 />
@@ -1323,6 +1395,10 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       });
                       return;
                     }
+                    if (isBlockedByOccupied) {
+                      setAllowAdditionalStoreIn(true);
+                      setLotNumber(generateLotNumber());
+                    }
                     setShowSlotSelector(true);
                   }}
                   className="btn"
@@ -1333,24 +1409,24 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                     fontWeight: 900,
                     background: !isProductInfoFilled
                       ? '#f8fafc'
-                      : alreadyOccupiedSlot
+                      : isBlockedByOccupied
                       ? '#fee2e2'
                       : selectedSlot 
                         ? 'linear-gradient(135deg, #059669, #047857)' 
                         : 'linear-gradient(135deg, #0284c7, #0369a1)',
                     color: !isProductInfoFilled
                       ? '#64748b'
-                      : alreadyOccupiedSlot ? '#991b1b' : '#ffffff',
+                      : isBlockedByOccupied ? '#991b1b' : '#ffffff',
                     borderRadius: '12px',
                     border: !isProductInfoFilled
                       ? '2px dashed #cbd5e1'
-                      : alreadyOccupiedSlot ? '2px solid #ef4444' : 'none',
+                      : isBlockedByOccupied ? '2px solid #ef4444' : 'none',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
                     gap: '8px',
-                    boxShadow: (!isProductInfoFilled || alreadyOccupiedSlot) ? 'none' : '0 4px 14px rgba(2, 132, 199, 0.22)',
+                    boxShadow: (!isProductInfoFilled || isBlockedByOccupied) ? 'none' : '0 4px 14px rgba(2, 132, 199, 0.22)',
                     cursor: !isProductInfoFilled ? 'not-allowed' : 'pointer',
                     transition: 'all 0.2s ease',
                     opacity: !isProductInfoFilled ? 0.9 : 1
@@ -1377,7 +1453,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       }}>
                         🔒 ต้องกรอกข้อมูลสินค้าก่อน
                       </span>
-                    ) : alreadyOccupiedSlot ? (
+                    ) : isBlockedByOccupied ? (
                       <span style={{
                         background: '#dc2626',
                         color: '#fff',
@@ -1386,7 +1462,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                         fontSize: '0.82rem',
                         fontWeight: 800
                       }}>
-                        🛑 มีในช่อง {alreadyOccupiedSlot.slot_code} แล้ว
+                        🛑 มีในช่อง {alreadyOccupiedSlot.slot_code} แล้ว (คลิกเพื่อเพิ่มสินค้า)
                       </span>
                     ) : selectedSlot ? (
                       <span style={{
@@ -1441,7 +1517,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                     <AlertCircle size={15} color="#d97706" />
                     <span>จำเป็นต้องกรอกข้อมูลสินค้า (รหัสบาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะสามารถเลือกช่องจัดเก็บได้</span>
                   </div>
-                ) : selectedSlot && !alreadyOccupiedSlot ? (
+                ) : selectedSlot && !isBlockedByOccupied ? (
                   <div style={{
                     background: '#f0fdf4',
                     border: '1.5px solid #86efac',
@@ -1484,7 +1560,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       </button>
                     </div>
                   </div>
-                ) : !alreadyOccupiedSlot ? (
+                ) : !isBlockedByOccupied ? (
                   <div style={{
                     fontSize: '0.8rem',
                     color: '#0369a1',
@@ -1505,18 +1581,18 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
               {/* Step 2: Print QR Code Button */}
               <div style={{
-                background: alreadyOccupiedSlot ? '#f1f5f9' : isLabelPrinted ? '#f0fdf4' : '#f8fafc',
+                background: isBlockedByOccupied ? '#f1f5f9' : isLabelPrinted ? '#f0fdf4' : '#f8fafc',
                 padding: '14px 16px',
                 borderRadius: '12px',
-                border: `1.5px solid ${alreadyOccupiedSlot ? '#cbd5e1' : isLabelPrinted ? '#86efac' : '#cbd5e1'}`
+                border: `1.5px solid ${isBlockedByOccupied ? '#cbd5e1' : isLabelPrinted ? '#86efac' : '#cbd5e1'}`
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 900, color: '#0f172a', fontSize: '0.95rem' }}>
-                    <Printer size={18} color={alreadyOccupiedSlot ? '#94a3b8' : '#0284c7'} />
+                    <Printer size={18} color={isBlockedByOccupied ? '#94a3b8' : '#0284c7'} />
                     <span>ขั้นตอนที่ 1: พิมพ์ฉลาก QR Code พิกัด</span>
                   </div>
-                  {alreadyOccupiedSlot ? (
-                    <span className="badge badge-rose" style={{ fontSize: '0.75rem' }}>ระงับการพิมพ์ (มีในคลังแล้ว)</span>
+                  {isBlockedByOccupied ? (
+                    <span className="badge badge-rose" style={{ fontSize: '0.75rem' }}>คลิก "เพิ่มสินค้า" ก่อนพิมพ์</span>
                   ) : isLabelPrinted ? (
                     <span className="badge badge-emerald" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem' }}>
                       <CheckCircle2 size={13} /> พิมพ์ฉลากพร้อมแล้ว
@@ -1529,15 +1605,15 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 <button
                   type="button"
                   onClick={handlePrintLabel}
-                  disabled={alreadyOccupiedSlot || !productName.trim() || !category || !weightKg || !selectedSlotId}
+                  disabled={isBlockedByOccupied || !productName.trim() || !category || !weightKg || !selectedSlotId}
                   className="btn btn-secondary"
                   style={{
                     width: '100%',
                     padding: '10px',
                     fontSize: '0.95rem',
                     fontWeight: 800,
-                    color: (alreadyOccupiedSlot || !productName.trim() || !category || !weightKg || !selectedSlotId) ? '#94a3b8' : '#0284c7',
-                    borderColor: (alreadyOccupiedSlot || !productName.trim() || !category || !weightKg || !selectedSlotId) ? '#cbd5e1' : '#0284c7'
+                    color: (isBlockedByOccupied || !productName.trim() || !category || !weightKg || !selectedSlotId) ? '#94a3b8' : '#0284c7',
+                    borderColor: (isBlockedByOccupied || !productName.trim() || !category || !weightKg || !selectedSlotId) ? '#cbd5e1' : '#0284c7'
                   }}
                 >
                   <Printer size={16} /> สั่งพิมพ์ฉลาก QR Code (Print Label)
@@ -1548,20 +1624,20 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               <div>
                 <button
                   type="submit"
-                  disabled={alreadyOccupiedSlot || submitting || craneState.status !== 'IDLE' || !selectedSlotId || !isLabelPrinted}
+                  disabled={isBlockedByOccupied || submitting || craneState.status !== 'IDLE' || !selectedSlotId || !isLabelPrinted}
                   className="btn btn-success"
                   style={{
                     width: '100%',
                     padding: '14px',
                     fontSize: '1.05rem',
                     fontWeight: 900,
-                    cursor: (alreadyOccupiedSlot || !selectedSlotId || !isLabelPrinted || submitting || craneState.status !== 'IDLE') ? 'not-allowed' : 'pointer',
-                    opacity: (alreadyOccupiedSlot || !selectedSlotId || !isLabelPrinted) ? 0.65 : 1
+                    cursor: (isBlockedByOccupied || !selectedSlotId || !isLabelPrinted || submitting || craneState.status !== 'IDLE') ? 'not-allowed' : 'pointer',
+                    opacity: (isBlockedByOccupied || !selectedSlotId || !isLabelPrinted) ? 0.65 : 1
                   }}
                 >
                   <ArrowDownToLine size={20} />
-                  {alreadyOccupiedSlot
-                    ? `❌ สินค้าถูกจัดเก็บในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (ไม่อนุญาตให้จัดเก็บซ้ำ)`
+                  {isBlockedByOccupied
+                    ? `⚠️ สินค้ามีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (คลิก "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม)`
                     : craneState.status !== 'IDLE' 
                     ? `เครนกำลังทำงาน (${craneState.status})...` 
                     : !selectedSlotId 
@@ -2147,15 +2223,15 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 <button
                   type="button"
                   onClick={handleAutoSuggestSlot}
-                  disabled={Boolean(alreadyOccupiedSlot) || !isProductInfoFilled}
+                  disabled={isBlockedByOccupied || !isProductInfoFilled}
                   className="btn btn-secondary"
                   style={{
                     padding: '6px 12px',
                     fontSize: '0.82rem',
-                    color: alreadyOccupiedSlot ? '#94a3b8' : '#0284c7',
-                    borderColor: alreadyOccupiedSlot ? '#cbd5e1' : '#0284c7',
+                    color: isBlockedByOccupied ? '#94a3b8' : '#0284c7',
+                    borderColor: isBlockedByOccupied ? '#cbd5e1' : '#0284c7',
                     fontWeight: 800,
-                    cursor: alreadyOccupiedSlot ? 'not-allowed' : 'pointer',
+                    cursor: isBlockedByOccupied ? 'not-allowed' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '5px'
@@ -2381,7 +2457,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             {/* Selected Slot Indicator Status Card */}
             <div style={{
               marginTop: '12px',
-              background: alreadyOccupiedSlot 
+              background: isBlockedByOccupied 
                 ? '#fee2e2' 
                 : selectedSlot 
                 ? '#dcfce7' 
@@ -2389,7 +2465,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               padding: '12px 16px',
               borderRadius: '12px',
               border: `1.5px solid ${
-                alreadyOccupiedSlot 
+                isBlockedByOccupied 
                   ? '#fca5a5' 
                   : selectedSlot 
                   ? '#86efac' 
@@ -2402,17 +2478,17 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               gap: '8px'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {alreadyOccupiedSlot ? (
+                {isBlockedByOccupied ? (
                   <Ban size={20} color="#dc2626" />
                 ) : (
                   <MapPin size={20} color={selectedSlot ? '#15803d' : '#b45309'} />
                 )}
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: alreadyOccupiedSlot ? '#b91c1c' : selectedSlot ? '#15803d' : '#b45309', fontWeight: 800 }}>
-                    {alreadyOccupiedSlot ? 'สถานะ: มีอยู่ในคลังแล้ว' : selectedSlot ? 'ช่องจัดเก็บที่เลือก:' : 'ยังไม่ได้เลือกช่องจัดเก็บ:'}
+                  <div style={{ fontSize: '0.75rem', color: isBlockedByOccupied ? '#b91c1c' : selectedSlot ? '#15803d' : '#b45309', fontWeight: 800 }}>
+                    {isBlockedByOccupied ? 'สถานะ: มีอยู่ในคลังแล้ว' : selectedSlot ? 'ช่องจัดเก็บที่เลือก:' : 'ยังไม่ได้เลือกช่องจัดเก็บ:'}
                   </div>
                   <div style={{ fontSize: '0.96rem', fontWeight: 900, color: '#0f172a' }}>
-                    {alreadyOccupiedSlot 
+                    {isBlockedByOccupied 
                       ? `จัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (ไม่อนุญาตให้เลือกช่องซ้ำ)`
                       : selectedSlot 
                       ? `ช่อง ${selectedSlot.slot_code} (ชั้น ${selectedSlot.level}, ช่อง ${selectedSlot.bay})` 
@@ -2421,7 +2497,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 </div>
               </div>
 
-              {selectedSlot && !alreadyOccupiedSlot && (
+              {selectedSlot && !isBlockedByOccupied && (
                 <div style={{
                   fontFamily: 'var(--font-mono)',
                   fontSize: '0.85rem',
@@ -2445,9 +2521,9 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               <select
                 className="form-input"
                 value={selectedSlotId}
-                disabled={Boolean(alreadyOccupiedSlot)}
+                disabled={Boolean(isBlockedByOccupied)}
                 onChange={(e) => {
-                  if (alreadyOccupiedSlot) return;
+                  if (isBlockedByOccupied) return;
                   setSelectedSlotId(e.target.value);
                   setIsLabelPrinted(false);
                   const found = slots.find(s => String(s.slot_id) === e.target.value);
@@ -2463,11 +2539,11 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   fontWeight: 700,
                   fontSize: '0.85rem',
                   padding: '8px 12px',
-                  background: alreadyOccupiedSlot ? '#f1f5f9' : '#ffffff',
-                  cursor: alreadyOccupiedSlot ? 'not-allowed' : 'pointer'
+                  background: isBlockedByOccupied ? '#f1f5f9' : '#ffffff',
+                  cursor: isBlockedByOccupied ? 'not-allowed' : 'pointer'
                 }}
               >
-                <option value="">{alreadyOccupiedSlot ? '-- ระงับการเลือก (สินค้านี้จัดเก็บในคลังแล้ว) --' : '-- หรือคลิกเลือกจากดรอปดาวน์ --'}</option>
+                <option value="">{isBlockedByOccupied ? '-- ระงับการเลือก (คลิก "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม) --' : '-- หรือคลิกเลือกจากดรอปดาวน์ --'}</option>
                 {slots.map(s => (
                   <option key={s.slot_id} value={s.slot_id} disabled={s.is_occupied}>
                     {s.slot_code} (ชั้น {s.level}, ช่อง {s.bay}) ➔ พิกัด X:{s.x_axis} Y:{s.y_axis} {s.is_occupied ? `❌ [ไม่ว่าง - QR: ${s.qr_code}]` : '✨ [ว่างพร้อมจัดเก็บ]'}
@@ -2489,17 +2565,17 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               <button
                 type="button"
                 onClick={() => setShowSlotSelector(false)}
-                disabled={!selectedSlot || Boolean(alreadyOccupiedSlot) || !isProductInfoFilled}
+                disabled={!selectedSlot || Boolean(isBlockedByOccupied) || !isProductInfoFilled}
                 className="btn btn-primary"
                 style={{
                   padding: '9px 24px',
                   fontSize: '0.92rem',
                   fontWeight: 900,
-                  background: (!selectedSlot || alreadyOccupiedSlot || !isProductInfoFilled)
+                  background: (!selectedSlot || isBlockedByOccupied || !isProductInfoFilled)
                     ? '#94a3b8'
                     : 'linear-gradient(135deg, #059669, #10b981)',
-                  borderColor: (!selectedSlot || alreadyOccupiedSlot || !isProductInfoFilled) ? '#cbd5e1' : '#059669',
-                  cursor: (!selectedSlot || alreadyOccupiedSlot || !isProductInfoFilled) ? 'not-allowed' : 'pointer',
+                  borderColor: (!selectedSlot || isBlockedByOccupied || !isProductInfoFilled) ? '#cbd5e1' : '#059669',
+                  cursor: (!selectedSlot || isBlockedByOccupied || !isProductInfoFilled) ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px'
