@@ -268,30 +268,6 @@ export const TransactionHistory = () => {
         </div>
       )}
 
-      {/* Retention Policy Notice Banner */}
-      <div style={{
-        background: '#f0fdf4',
-        border: '1.5px solid #86efac',
-        padding: '12px 18px',
-        borderRadius: '12px',
-        marginBottom: '20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '10px',
-        fontSize: '0.9rem',
-        fontWeight: 700,
-        color: '#166534'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Clock size={18} color="#15803d" />
-          <span>นโยบายความจุข้อมูล: แสดงประวัติสูงสุด 3 เดือนย้อนหลัง ({threeMonthsAgoStr} ถึง {todayStr}) ข้อมูลที่เก่ากว่า 3 เดือนจะถูกล้างอัตโนมัติ</span>
-        </div>
-        <span className="badge badge-emerald" style={{ fontSize: '0.75rem' }}>
-          Auto-Purge Active
-        </span>
-      </div>
 
       {/* Date Range Selector & Filter Toolbar */}
       <div className="glass-panel" style={{
