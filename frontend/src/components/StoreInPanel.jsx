@@ -1519,22 +1519,6 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       </button>
                     </div>
                   </div>
-                ) : !isBlockedByOccupied ? (
-                  <div style={{
-                    fontSize: '0.8rem',
-                    color: '#0369a1',
-                    background: '#f0f9ff',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #bae6fd',
-                    fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}>
-                    <CheckCircle2 size={15} color="#0284c7" />
-                    <span>ข้อมูลสินค้าพร้อมแล้ว! กรุณากดปุ่ม <strong>"เลือกช่องจัดเก็บ"</strong> เพื่อเปิดหน้าต่างผังชั้นวาง</span>
-                  </div>
                 ) : null}
               </div>
 
