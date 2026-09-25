@@ -39,7 +39,7 @@ import {
   CornerDownLeft
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { useWarehouse } from '../context/WarehouseContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -629,21 +629,40 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       if (!container) return;
 
       try {
+        const formatsToSupport = [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.DATA_MATRIX
+        ];
+
         const scanner = new Html5QrcodeScanner('qr-reader-inbound', {
-          fps: 25,
+          fps: 20,
+          formatsToSupport: formatsToSupport,
           qrbox: (viewfinderWidth, viewfinderHeight) => {
-            // Dynamic rectangular box optimized for 1D Barcodes & 2D QR codes
-            const width = Math.floor(Math.min(viewfinderWidth * 0.90, 360));
-            const height = Math.floor(Math.min(viewfinderHeight * 0.65, 200));
+            // Generous scanning area for fast, frictionless detection (both 1D Barcode & 2D QR)
+            const width = Math.max(260, Math.floor(viewfinderWidth * 0.88));
+            const height = Math.max(220, Math.floor(viewfinderHeight * 0.78));
             return { width, height };
           },
           aspectRatio: 1.333334,
+          disableFlip: false,
           showTorchButtonIfSupported: true,
           showZoomSliderIfSupported: true,
-          defaultZoomValueIfSupported: 1.5,
+          defaultZoomValueIfSupported: 1.0,
           rememberLastUsedCamera: true,
+          useBarCodeDetectorIfSupported: true,
           experimentalFeatures: {
             useBarCodeDetectorIfSupported: true
+          },
+          videoConstraints: {
+            facingMode: { ideal: 'environment' },
+            focusMode: 'continuous',
+            advanced: [{ focusMode: 'continuous' }]
           }
         });
 
