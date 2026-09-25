@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ArrowDownToLine, 
   Camera, 
@@ -73,6 +73,42 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   const [showCamera, setShowCamera] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
+
+  // Camera Scanner Refs & Controller
+  const scannerRef = useRef(null);
+  const isScanProcessedRef = useRef(false);
+  const processIncomingQrCodeRef = useRef(null);
+
+  // Safe helper to physically turn off camera hardware and clear scanner instance
+  const closeCamera = () => {
+    // 1. Physically stop active MediaStream tracks on all video elements inside qr-reader-inbound
+    try {
+      const container = document.getElementById('qr-reader-inbound');
+      if (container) {
+        const videos = container.querySelectorAll('video');
+        videos.forEach(v => {
+          if (v.srcObject && typeof v.srcObject.getTracks === 'function') {
+            v.srcObject.getTracks().forEach(track => {
+              try { track.stop(); } catch (e) {}
+            });
+            v.srcObject = null;
+          }
+        });
+      }
+    } catch (e) {}
+
+    // 2. Safely clear the Html5QrcodeScanner instance
+    if (scannerRef.current) {
+      const sc = scannerRef.current;
+      scannerRef.current = null;
+      try {
+        sc.clear().catch(() => {});
+      } catch (e) {}
+    }
+
+    // 3. Close the camera UI in React state
+    setShowCamera(false);
+  };
   
   // Duplicate / Already Occupied Detection (For system-assigned QR labels)
   const [alreadyOccupiedSlot, setAlreadyOccupiedSlot] = useState(null);
@@ -152,8 +188,11 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
         type: 'success',
         text: `📷 สแกนจากกล้อง ${lastScannedQr.device || 'ESP32-CAM'} สำเร็จ: [${lastScannedQr.code}]`
       });
+      if (showCamera) {
+        closeCamera();
+      }
     }
-  }, [lastScannedQr]);
+  }, [lastScannedQr, showCamera]);
 
   // Intelligent QR Code / 1D Barcode Processor
   // Case 1: Scanning a known product barcode for a NEW box -> Auto-fill details & ALLOW picking an empty slot
@@ -524,41 +563,111 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     });
   };
 
+  useEffect(() => {
+    processIncomingQrCodeRef.current = processIncomingQrCode;
+  });
+
+  // Handler invoked immediately upon detecting a valid barcode / QR code
+  const handleScanSuccess = (decodedText) => {
+    if (isScanProcessedRef.current) return;
+    isScanProcessedRef.current = true;
+
+    console.log('✅ Barcode/QR Code scanned successfully:', decodedText);
+
+    // 1. Physically shut down the camera hardware immediately
+    try {
+      const container = document.getElementById('qr-reader-inbound');
+      if (container) {
+        const videos = container.querySelectorAll('video');
+        videos.forEach(v => {
+          if (v.srcObject && typeof v.srcObject.getTracks === 'function') {
+            v.srcObject.getTracks().forEach(track => {
+              try { track.stop(); } catch (e) {}
+            });
+            v.srcObject = null;
+          }
+        });
+      }
+    } catch (e) {}
+
+    // 2. Clear scanner instance safely
+    if (scannerRef.current) {
+      const sc = scannerRef.current;
+      scannerRef.current = null;
+      try {
+        sc.clear().catch(() => {});
+      } catch (e) {}
+    }
+
+    // 3. Close camera UI (hide camera view)
+    setShowCamera(false);
+
+    // 4. Fill product details into form and play scan audio beep
+    try {
+      if (processIncomingQrCodeRef.current) {
+        processIncomingQrCodeRef.current(decodedText);
+      }
+      playScanBeep();
+    } catch (err) {
+      console.error('Error processing scanned code:', err);
+    }
+  };
+
   // High-Clarity Camera QR & 1D Barcode Scanner Handler
   useEffect(() => {
-    if (showCamera) {
-      const scanner = new Html5QrcodeScanner('qr-reader-inbound', {
-        fps: 25,
-        qrbox: (viewfinderWidth, viewfinderHeight) => {
-          // Dynamic rectangular box optimized for 1D Barcodes & 2D QR codes
-          const width = Math.floor(Math.min(viewfinderWidth * 0.90, 360));
-          const height = Math.floor(Math.min(viewfinderHeight * 0.65, 200));
-          return { width, height };
-        },
-        aspectRatio: 1.333334,
-        showTorchButtonIfSupported: true,
-        showZoomSliderIfSupported: true,
-        defaultZoomValueIfSupported: 1.5,
-        rememberLastUsedCamera: true,
-        experimentalFeatures: {
-          useBarCodeDetectorIfSupported: true
-        }
-      });
-
-      scanner.render(
-        (decodedText) => {
-          processIncomingQrCode(decodedText);
-          setShowCamera(false);
-          scanner.clear().catch(() => {});
-        },
-        (error) => {}
-      );
-
-      return () => {
-        scanner.clear().catch(() => {});
-      };
+    if (!showCamera) {
+      return;
     }
-  }, [showCamera, slots]);
+
+    isScanProcessedRef.current = false;
+
+    let isCancelled = false;
+    const timer = setTimeout(() => {
+      if (isCancelled) return;
+
+      const container = document.getElementById('qr-reader-inbound');
+      if (!container) return;
+
+      try {
+        const scanner = new Html5QrcodeScanner('qr-reader-inbound', {
+          fps: 25,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            // Dynamic rectangular box optimized for 1D Barcodes & 2D QR codes
+            const width = Math.floor(Math.min(viewfinderWidth * 0.90, 360));
+            const height = Math.floor(Math.min(viewfinderHeight * 0.65, 200));
+            return { width, height };
+          },
+          aspectRatio: 1.333334,
+          showTorchButtonIfSupported: true,
+          showZoomSliderIfSupported: true,
+          defaultZoomValueIfSupported: 1.5,
+          rememberLastUsedCamera: true,
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true
+          }
+        });
+
+        scannerRef.current = scanner;
+
+        scanner.render(
+          (decodedText) => {
+            handleScanSuccess(decodedText);
+          },
+          (error) => {
+            // Ignore scan frame error (expected while camera is searching)
+          }
+        );
+      } catch (err) {
+        console.error('Error starting camera scanner:', err);
+      }
+    }, 100);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+      closeCamera();
+    };
+  }, [showCamera]);
 
   // Handle Slot Click on 2D Matrix
   const handleSlotClick = (slot) => {
@@ -1153,7 +1262,13 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 type="button"
                 className={`btn ${showCamera ? 'btn-danger' : 'btn-primary'}`}
                 style={{ padding: '6px 14px', fontSize: '0.85rem', fontWeight: 800 }}
-                onClick={() => setShowCamera(!showCamera)}
+                onClick={() => {
+                  if (showCamera) {
+                    closeCamera();
+                  } else {
+                    setShowCamera(true);
+                  }
+                }}
               >
                 {showCamera ? <CameraOff size={15} /> : <Camera size={15} />}
                 {showCamera ? 'ปิดกล้อง' : 'สแกน QR ผ่านกล้อง'}
