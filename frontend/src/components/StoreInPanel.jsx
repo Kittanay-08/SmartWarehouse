@@ -73,6 +73,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   const [showCamera, setShowCamera] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
+  const [slotError, setSlotError] = useState(false);
 
   // Camera Scanner Refs & Controller
   const scannerRef = useRef(null);
@@ -175,8 +176,16 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     if (!isProductInfoFilled && selectedSlotId) {
       setSelectedSlotId('');
       setIsLabelPrinted(false);
+      setSlotError(false);
     }
   }, [isProductInfoFilled, selectedSlotId]);
+
+  // Clear slot error when a slot is selected
+  useEffect(() => {
+    if (selectedSlotId) {
+      setSlotError(false);
+    }
+  }, [selectedSlotId]);
 
   // Handle incoming QR / Barcode scan from ESP32-CAM via MQTT
   useEffect(() => {
@@ -712,6 +721,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     }
 
     setSelectedSlotId(String(slot.slot_id));
+    setSlotError(false);
     setIsLabelPrinted(false);
     setMessage(null);
   };
@@ -754,9 +764,11 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       return;
     }
     if (!selectedSlotId) {
-      setMessage({ type: 'error', text: 'กรุณาเลือกช่องจัดเก็บบนผังชั้นวางก่อนพิมพ์ฉลาก' });
+      setSlotError(true);
+      setMessage({ type: 'error', text: '⚠️ กรุณาเลือกช่องจัดเก็บสินค้า' });
       return;
     }
+    setSlotError(false);
     setShowPrintModal(true);
   };
 
@@ -866,7 +878,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       return;
     }
     if (!selectedSlotId) {
-      setMessage({ type: 'error', text: 'กรุณาคลิกเลือกช่องจัดเก็บบนผังชั้นวาง หรือเลือกจากเมนูดรอปดาวน์' });
+      setSlotError(true);
+      setMessage({ type: 'error', text: '⚠️ กรุณาเลือกช่องจัดเก็บสินค้า' });
       return;
     }
     if (!isLabelPrinted) {
@@ -1492,19 +1505,20 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       setAllowAdditionalStoreIn(true);
                       setLotNumber(generateLotNumber());
                     }
+                    setSlotError(false);
                     setShowSlotSelector(true);
                   }}
                   disabled={!isProductInfoFilled}
                   onMouseEnter={(e) => {
                     if (isProductInfoFilled) {
-                      e.currentTarget.style.borderColor = selectedSlot ? '#16a34a' : '#0284c7';
-                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(2, 132, 199, 0.15)';
+                      e.currentTarget.style.borderColor = selectedSlot ? '#16a34a' : slotError && !selectedSlot ? '#dc2626' : '#0284c7';
+                      e.currentTarget.style.boxShadow = slotError && !selectedSlot ? '0 2px 8px rgba(220, 38, 38, 0.2)' : '0 2px 8px rgba(2, 132, 199, 0.15)';
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (isProductInfoFilled) {
-                      e.currentTarget.style.borderColor = isBlockedByOccupied ? '#ef4444' : selectedSlot ? '#86efac' : '#cbd5e1';
-                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                      e.currentTarget.style.borderColor = isBlockedByOccupied ? '#ef4444' : slotError && !selectedSlot ? '#ef4444' : selectedSlot ? '#86efac' : '#cbd5e1';
+                      e.currentTarget.style.boxShadow = slotError && !selectedSlot ? '0 0 0 3px rgba(239, 68, 68, 0.15)' : '0 1px 3px rgba(0,0,0,0.05)';
                     }
                   }}
                   style={{
@@ -1516,6 +1530,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       ? '1.5px dashed #cbd5e1'
                       : isBlockedByOccupied
                       ? '1.5px solid #ef4444'
+                      : slotError && !selectedSlot
+                      ? '1.5px solid #ef4444'
                       : selectedSlot
                       ? '1.5px solid #86efac'
                       : '1.5px solid #cbd5e1',
@@ -1523,6 +1539,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       ? '#f8fafc'
                       : isBlockedByOccupied
                       ? '#fee2e2'
+                      : slotError && !selectedSlot
+                      ? '#fef2f2'
                       : selectedSlot
                       ? '#f0fdf4'
                       : '#ffffff',
@@ -1530,7 +1548,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                     alignItems: 'center',
                     gap: '12px',
                     cursor: !isProductInfoFilled ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                    boxShadow: slotError && !selectedSlot ? '0 0 0 3px rgba(239, 68, 68, 0.15)' : '0 1px 3px rgba(0,0,0,0.05)',
                     transition: 'all 0.2s ease',
                     textAlign: 'left'
                   }}
@@ -1543,6 +1561,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       ? '#e2e8f0'
                       : isBlockedByOccupied
                       ? '#dc2626'
+                      : slotError && !selectedSlot
+                      ? '#fee2e2'
                       : selectedSlot
                       ? '#16a34a'
                       : '#e0f2fe',
@@ -1550,6 +1570,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       ? '#64748b'
                       : isBlockedByOccupied
                       ? '#ffffff'
+                      : slotError && !selectedSlot
+                      ? '#dc2626'
                       : selectedSlot
                       ? '#ffffff'
                       : '#0284c7',
@@ -1562,6 +1584,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       <Lock size={19} color="#64748b" />
                     ) : isBlockedByOccupied ? (
                       <Ban size={19} color="#ffffff" />
+                    ) : slotError && !selectedSlot ? (
+                      <AlertCircle size={19} color="#dc2626" />
                     ) : selectedSlot ? (
                       <CheckCircle2 size={19} color="#ffffff" />
                     ) : (
@@ -1576,6 +1600,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       ? '#94a3b8'
                       : isBlockedByOccupied
                       ? '#991b1b'
+                      : slotError && !selectedSlot
+                      ? '#dc2626'
                       : selectedSlot
                       ? '#15803d'
                       : '#0f172a',
@@ -1588,11 +1614,29 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       ? 'เลือกช่องจัดเก็บสินค้า'
                       : isBlockedByOccupied
                       ? `มีในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (คลิกเพิ่มสินค้า)`
+                      : slotError && !selectedSlot
+                      ? 'กรุณาเลือกช่องจัดเก็บสินค้า'
                       : selectedSlot
                       ? `ช่อง ${selectedSlot.slot_code} (ชั้น ${selectedSlot.level}, ช่อง ${selectedSlot.bay})`
                       : 'เลือกช่องจัดเก็บสินค้า'}
                   </span>
                 </button>
+
+                {/* Warning message below the button when slotError is active */}
+                {slotError && !selectedSlot && (
+                  <div style={{
+                    fontSize: '0.84rem',
+                    color: '#dc2626',
+                    fontWeight: 800,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    marginTop: '2px'
+                  }}>
+                    <AlertCircle size={14} color="#dc2626" />
+                    <span>กรุณาเลือกช่องจัดเก็บสินค้า</span>
+                  </div>
+                )}
 
                 {/* Helper / Warning when incomplete */}
                 {!isProductInfoFilled && (
@@ -1640,15 +1684,15 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 <button
                   type="button"
                   onClick={handlePrintLabel}
-                  disabled={isBlockedByOccupied || !productName.trim() || !category || !weightKg || !selectedSlotId}
+                  disabled={isBlockedByOccupied || !productName.trim() || !category || !weightKg}
                   className="btn btn-secondary"
                   style={{
                     width: '100%',
                     padding: '10px',
                     fontSize: '0.95rem',
                     fontWeight: 800,
-                    color: (isBlockedByOccupied || !productName.trim() || !category || !weightKg || !selectedSlotId) ? '#94a3b8' : '#0284c7',
-                    borderColor: (isBlockedByOccupied || !productName.trim() || !category || !weightKg || !selectedSlotId) ? '#cbd5e1' : '#0284c7'
+                    color: (isBlockedByOccupied || !productName.trim() || !category || !weightKg) ? '#94a3b8' : '#0284c7',
+                    borderColor: (isBlockedByOccupied || !productName.trim() || !category || !weightKg) ? '#cbd5e1' : '#0284c7'
                   }}
                 >
                   <Printer size={16} /> สั่งพิมพ์ฉลาก QR Code (Print Label)

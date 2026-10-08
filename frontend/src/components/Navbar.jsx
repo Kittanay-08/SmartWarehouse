@@ -182,32 +182,6 @@ export const Navbar = ({ activeTab, setActiveTab }) => {
             <Activity size={13} />
             <span>CRANE: {craneState.status}</span>
           </div>
-
-          {/* E-Stop Button */}
-          {craneState.emergencyStop ? (
-            isSafetyAdmin ? (
-              <button 
-                onClick={resetEmergencyStop}
-                className="btn btn-primary"
-                style={{ padding: '5px 12px', fontSize: '0.78rem', fontWeight: 800, borderRadius: '16px', flexShrink: 0 }}
-              >
-                🔄 ปลดล็อค E-Stop
-              </button>
-            ) : (
-              <span style={{ fontSize: '0.75rem', color: '#b91c1c', fontWeight: 800, background: '#fee2e2', padding: '5px 11px', borderRadius: '16px', border: '1px solid #fecdd3', flexShrink: 0 }}>
-                🔒 E-Stop ค้าง
-              </span>
-            )
-          ) : (
-            <button 
-              onClick={emergencyStop}
-              className="btn btn-danger"
-              style={{ padding: '5px 12px', fontSize: '0.78rem', fontWeight: 800, borderRadius: '16px', flexShrink: 0 }}
-              title="กดหยุดฉุกเฉิน"
-            >
-              <AlertTriangle size={13} /> E-STOP
-            </button>
-          )}
         </div>
       </div>
 
