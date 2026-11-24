@@ -1,4 +1,7 @@
-[https://warehouse.ceksu.site/](https://warehouse.ceksu.site/)
+[ลิ้งค์เข้าหน้าเว็บ](https://warehouse.ceksu.site/)
+
+
+
 ทำอะไรไปบ้าง 
 
 ผังสถาปัตยกรรม: frontend คุยกับ backend ผ่าน HTTP REST และ WebSocket (port 80 / 5000) และ backend ต่อฐานข้อมูลที่ port 5432 ส่วนบอร์ด ESP32 ส่งข้อมูลเข้า backend ผ่าน REST หรือ WebSocket
