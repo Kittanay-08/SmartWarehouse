@@ -40,6 +40,10 @@ export const UserProfileModal = () => {
   const [message, setMessage] = useState(null);
   const [saving, setSaving] = useState(false);
 
+  // Dedicated Password Change States
+  const [passwordMessage, setPasswordMessage] = useState(null);
+  const [savingPassword, setSavingPassword] = useState(false);
+
   useEffect(() => {
     if (user) {
       setName(user.name || '');
@@ -51,12 +55,81 @@ export const UserProfileModal = () => {
       setNewPassword('');
       setConfirmPassword('');
       setMessage(null);
+      setPasswordMessage(null);
     }
   }, [user, isProfileModalOpen]);
 
   if (!isProfileModalOpen) return null;
 
-  const handleSubmit = (e) => {
+  // Dedicated Handler: Confirm Change Password directly
+  const handleConfirmPasswordChange = async (e) => {
+    if (e) e.preventDefault();
+    setPasswordMessage(null);
+    setMessage(null);
+
+    const cleanCurrent = (currentPassword || '').trim();
+    const cleanNew = (newPassword || '').trim();
+    const cleanConfirm = (confirmPassword || '').trim();
+
+    if (!cleanCurrent) {
+      setPasswordMessage({ type: 'error', text: 'กรุณากรอกรหัสผ่านเดิม / รหัสผ่านปัจจุบันเพื่อยืนยันตัวตน' });
+      return;
+    }
+
+    if (!cleanNew) {
+      setPasswordMessage({ type: 'error', text: 'กรุณากรอกรหัสผ่านใหม่' });
+      return;
+    }
+
+    if (cleanNew.length < 4) {
+      setPasswordMessage({ type: 'error', text: 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 4 ตัวอักษร' });
+      return;
+    }
+
+    if (cleanNew === cleanCurrent) {
+      setPasswordMessage({ type: 'error', text: 'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม' });
+      return;
+    }
+
+    if (cleanNew !== cleanConfirm) {
+      setPasswordMessage({ type: 'error', text: '❌ รหัสผ่านใหม่และการยืนยันรหัสผ่านไม่ตรงกัน' });
+      return;
+    }
+
+    setSavingPassword(true);
+    try {
+      const res = await updateUserProfile({
+        name: (name || user?.name || '').trim(),
+        email: (email || user?.email || '').trim(),
+        phone: (phone || user?.phone || '').trim(),
+        department: (department || user?.department || '').trim(),
+        avatar: user?.avatar || '👨‍💼',
+        currentPassword: cleanCurrent,
+        password: cleanNew
+      });
+
+      setSavingPassword(false);
+
+      if (res && res.success) {
+        setPasswordMessage({ type: 'success', text: '✅ เปลี่ยนรหัสผ่านสำเร็จเรียบร้อยแล้ว!' });
+        setMessage({ type: 'success', text: '✅ เปลี่ยนรหัสผ่านสำเร็จเรียบร้อยแล้ว สามารถใช้รหัสผ่านใหม่เข้าสู่ระบบได้ทันที' });
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => {
+          setIsChangingPassword(false);
+          setPasswordMessage(null);
+        }, 1800);
+      } else {
+        setPasswordMessage({ type: 'error', text: res?.message || 'รหัสผ่านปัจจุบันไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง' });
+      }
+    } catch (err) {
+      setSavingPassword(false);
+      setPasswordMessage({ type: 'error', text: err.response?.data?.error || err.message || 'เกิดข้อผิดพลาดในการเปลี่ยนรหัสผ่าน' });
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage(null);
 
@@ -65,40 +138,10 @@ export const UserProfileModal = () => {
       return;
     }
 
-    if (isChangingPassword) {
-      const userHasPassword = Boolean(user?.hasCustomPassword && user?.password);
-      
-      if (userHasPassword) {
-        if (!currentPassword) {
-          setMessage({ type: 'error', text: '⚠️ กรุณากรอกรหัสผ่านปัจจุบันเพื่อยืนยันตัวตนก่อนเปลี่ยนรหัสผ่าน' });
-          return;
-        }
-
-        if (currentPassword !== user.password) {
-          setMessage({ type: 'error', text: '❌ รหัสผ่านปัจจุบันไม่ถูกต้อง ไม่สามารถเปลี่ยนรหัสผ่านได้' });
-          return;
-        }
-      }
-
-      if (!newPassword) {
-        setMessage({ type: 'error', text: 'กรุณากรอกรหัสผ่านใหม่' });
-        return;
-      }
-
-      if (newPassword.length < 4) {
-        setMessage({ type: 'error', text: 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 4 ตัวอักษร' });
-        return;
-      }
-
-      if (userHasPassword && newPassword === currentPassword) {
-        setMessage({ type: 'error', text: '⚠️ รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม' });
-        return;
-      }
-
-      if (newPassword !== confirmPassword) {
-        setMessage({ type: 'error', text: '❌ รหัสผ่านใหม่และการยืนยันรหัสผ่านไม่ตรงกัน' });
-        return;
-      }
+    // If user filled in password fields while submitting whole profile, update password too
+    if (isChangingPassword && (currentPassword || newPassword)) {
+      await handleConfirmPasswordChange(e);
+      return;
     }
 
     setSaving(true);
@@ -108,38 +151,38 @@ export const UserProfileModal = () => {
       email: email.trim(),
       phone: phone.trim(),
       department: department.trim(),
-      avatar: user?.avatar || '👨‍💼' // Keep original permanent avatar
+      avatar: user?.avatar || '👨‍💼'
     };
 
-    if (isChangingPassword && newPassword) {
-      updatedData.password = newPassword;
-    }
-
-    const res = updateUserProfile(updatedData);
+    const res = await updateUserProfile(updatedData);
     setSaving(false);
 
-    if (res.success) {
-      setMessage({ type: 'success', text: isChangingPassword ? '✅ เปลี่ยนรหัสผ่านและอัปเดตข้อมูลส่วนตัวสำเร็จแล้ว' : '✅ อัปเดตข้อมูลส่วนตัวเรียบร้อยแล้ว' });
+    if (res && res.success) {
+      setMessage({ type: 'success', text: '✅ อัปเดตข้อมูลส่วนตัวเรียบร้อยแล้ว' });
       setTimeout(() => {
         setIsProfileModalOpen(false);
       }, 1400);
     } else {
-      setMessage({ type: 'error', text: res.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล' });
+      setMessage({ type: 'error', text: res?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล' });
     }
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(15, 23, 42, 0.65)',
-      backdropFilter: 'blur(8px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 2500,
-      padding: '20px'
-    }}>
+    <div 
+      className="modal-overlay" 
+      role="dialog" 
+      aria-modal="true"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(15, 23, 42, 0.65)',
+        backdropFilter: 'blur(8px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 2500,
+        padding: '20px'
+      }}>
       <div className="glass-panel animate-fade-in" style={{
         maxWidth: '560px',
         width: '100%',
@@ -158,7 +201,7 @@ export const UserProfileModal = () => {
               <span className="badge badge-cyan">User Account</span>
               <span className="badge badge-emerald">Security Verified</span>
             </div>
-            <h2 style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h2 style={{ fontSize: '1.65rem', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <User size={26} color="#0284c7" /> แก้ไขข้อมูลส่วนตัว
             </h2>
           </div>
@@ -194,7 +237,7 @@ export const UserProfileModal = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
-            fontWeight: 800
+            fontWeight: 600
           }}>
             {message.type === 'success' ? <Check size={20} /> : <AlertCircle size={20} />}
             <span>{message.text}</span>
@@ -229,7 +272,7 @@ export const UserProfileModal = () => {
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 900, fontSize: '1.3rem', color: '#0f172a' }}>
+              <span style={{ fontWeight: 700, fontSize: '1.3rem', color: '#0f172a' }}>
                 @{user?.username}
               </span>
               <span style={{
@@ -238,7 +281,7 @@ export const UserProfileModal = () => {
                 color: deptInfo?.color || '#0284c7',
                 padding: '3px 10px',
                 borderRadius: '12px',
-                fontWeight: 900,
+                fontWeight: 700,
                 fontSize: '0.8rem'
               }}>
                 {deptInfo?.badge || user?.roleLabel || user?.role?.toUpperCase()}
@@ -258,8 +301,8 @@ export const UserProfileModal = () => {
           padding: '16px',
           marginBottom: '20px'
         }}>
-          <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>
-            📋 สิทธิ์การเข้าถึงของบัญชีนี้ (Assigned Permissions):
+          <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>
+            📋 สิทธิ์การเข้าถึง:
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
             {deptInfo?.capabilities?.map((cap) => (
@@ -274,8 +317,8 @@ export const UserProfileModal = () => {
         {/* Form Fields */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-              ชื่อ-นามสกุล (Full Name) *
+            <label style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+              ชื่อ-นามสกุล *
             </label>
             <input
               type="text"
@@ -288,8 +331,8 @@ export const UserProfileModal = () => {
           </div>
 
           <div>
-            <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-              อีเมลติดต่อ (Email Address)
+            <label style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+              อีเมล
             </label>
             <input
               type="email"
@@ -301,8 +344,8 @@ export const UserProfileModal = () => {
           </div>
 
           <div>
-            <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-              เบอร์โทรศัพท์ (Phone)
+            <label style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+              เบอร์โทรศัพท์
             </label>
             <input
               type="text"
@@ -322,9 +365,9 @@ export const UserProfileModal = () => {
             marginTop: '6px'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: '#0f172a', fontSize: '1rem' }}>
                 <KeyRound size={18} color="#0284c7" />
-                <span>เปลี่ยนรหัสผ่านความปลอดภัย (Change Password)</span>
+                <span>เปลี่ยนรหัสผ่าน</span>
               </div>
               <button
                 type="button"
@@ -336,7 +379,7 @@ export const UserProfileModal = () => {
                   setMessage(null);
                 }}
                 className={`btn ${isChangingPassword ? 'btn-danger' : 'btn-secondary'}`}
-                style={{ padding: '5px 14px', fontSize: '0.85rem', fontWeight: 800 }}
+                style={{ padding: '5px 14px', fontSize: '0.85rem', fontWeight: 600 }}
               >
                 {isChangingPassword ? 'ยกเลิกการเปลี่ยนรหัส' : 'เปลี่ยนรหัสผ่าน'}
               </button>
@@ -345,66 +388,59 @@ export const UserProfileModal = () => {
             {isChangingPassword && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '16px' }}>
 
-                {/* 1. Current Password (Strict Requirement if set) */}
-                {user?.hasCustomPassword && user?.password ? (
-                  <div>
-                    <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                      1. รหัสผ่านเดิม / รหัสผ่านปัจจุบัน (Current Password) *
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type={showCurrentPassword ? 'text' : 'password'}
-                        className="form-input"
-                        value={currentPassword}
-                        onChange={(e) => setCurrentPassword(e.target.value)}
-                        placeholder="กรอกรหัสผ่านปัจจุบันของคุณเพื่อยืนยันตัวตน"
-                        style={{ paddingRight: '42px', borderColor: currentPassword ? '#0284c7' : '#cbd5e1' }}
-                        required={isChangingPassword}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                        style={{
-                          position: 'absolute',
-                          right: '12px',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          background: 'none',
-                          border: 'none',
-                          color: '#64748b',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
+                
+                {/* 1. Current Password */}
+                <div>
+                  <label style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                    1. รหัสผ่านปัจจุบัน *
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showCurrentPassword ? 'text' : 'password'}
+                      className="form-input"
+                      value={currentPassword}
+                      onChange={(e) => {
+                        setCurrentPassword(e.target.value);
+                        if (passwordMessage) setPasswordMessage(null);
+                      }}
+                      placeholder="กรอกรหัสผ่านเดิม (เช่น password123 หรือ 123456)"
+                      style={{ paddingRight: '42px', borderColor: currentPassword ? '#0284c7' : '#cbd5e1' }}
+                      required={isChangingPassword}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#64748b',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
                   </div>
-                ) : (
-                  <div style={{
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    background: '#e0f2fe',
-                    border: '1px solid #7dd3fc',
-                    color: '#0369a1',
-                    fontSize: '0.88rem',
-                    fontWeight: 700
-                  }}>
-                    ℹ️ บัญชีนี้ยังไม่เคยกำหนดรหัสผ่านความปลอดภัย สามารถตั้งรหัสผ่านใหม่ด้านล่างได้ทันที
-                  </div>
-                )}
+                </div>
 
                 {/* 2. New Password */}
                 <div>
-                  <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                    2. รหัสผ่านใหม่ (New Password) *
+                  <label style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                    2. รหัสผ่านใหม่ *
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
                       type={showNewPassword ? 'text' : 'password'}
                       className="form-input"
                       value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="ตั้งรหัสผ่านใหม่อย่างน้อย 6 ตัวอักษร"
+                      onChange={(e) => {
+                        setNewPassword(e.target.value);
+                        if (passwordMessage) setPasswordMessage(null);
+                      }}
+                      placeholder="ตั้งรหัสผ่านใหม่อย่างน้อย 4 ตัวอักษร"
                       style={{ paddingRight: '42px' }}
                       required={isChangingPassword}
                     />
@@ -429,15 +465,18 @@ export const UserProfileModal = () => {
 
                 {/* 3. Confirm New Password */}
                 <div>
-                  <label style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                    3. ยืนยันรหัสผ่านใหม่ (Confirm New Password) *
+                  <label style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                    3. ยืนยันรหัสผ่านใหม่ *
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
                       className="form-input"
                       value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        if (passwordMessage) setPasswordMessage(null);
+                      }}
                       placeholder="พิมพ์รหัสผ่านใหม่อีกครั้งให้ตรงกัน"
                       style={{ paddingRight: '42px' }}
                       required={isChangingPassword}
@@ -460,6 +499,59 @@ export const UserProfileModal = () => {
                     </button>
                   </div>
                 </div>
+
+                {/* Inline Password Feedback Alert */}
+                {passwordMessage && (
+                  <div style={{
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    fontSize: '0.9rem',
+                    fontWeight: 700,
+                    background: passwordMessage.type === 'success' ? '#f0fdf4' : '#fef2f2',
+                    color: passwordMessage.type === 'success' ? '#166534' : '#991b1b',
+                    border: `1.5px solid ${passwordMessage.type === 'success' ? '#bbf7d0' : '#fecaca'}`
+                  }}>
+                    {passwordMessage.type === 'success' ? (
+                      <CheckCircle2 size={18} color="#16a34a" style={{ flexShrink: 0 }} />
+                    ) : (
+                      <AlertCircle size={18} color="#dc2626" style={{ flexShrink: 0 }} />
+                    )}
+                    <span>{passwordMessage.text}</span>
+                  </div>
+                )}
+
+                {/* Dedicated Confirm Password Change Button */}
+                <div style={{ marginTop: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={handleConfirmPasswordChange}
+                    disabled={savingPassword}
+                    className="btn btn-primary"
+                    style={{
+                      width: '100%',
+                      padding: '13px 20px',
+                      background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontWeight: 700,
+                      fontSize: '0.98rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      cursor: savingPassword ? 'wait' : 'pointer',
+                      boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <KeyRound size={18} />
+                    <span>{savingPassword ? 'กำลังตรวจสอบและเปลี่ยนรหัสผ่าน...' : 'ยืนยันเปลี่ยนรหัสผ่าน'}</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -470,7 +562,7 @@ export const UserProfileModal = () => {
               type="button"
               onClick={() => setIsProfileModalOpen(false)}
               className="btn btn-secondary"
-              style={{ flex: 1, padding: '14px', fontSize: '1rem', fontWeight: 800 }}
+              style={{ flex: 1, padding: '14px', fontSize: '1rem', fontWeight: 600 }}
             >
               ยกเลิก
             </button>
@@ -478,7 +570,7 @@ export const UserProfileModal = () => {
               type="submit"
               disabled={saving}
               className="btn btn-primary"
-              style={{ flex: 2, padding: '14px', fontSize: '1rem', fontWeight: 900 }}
+              style={{ flex: 2, padding: '14px', fontSize: '1rem', fontWeight: 700 }}
             >
               <Save size={18} /> {saving ? 'กำลังบันทึก...' : 'บันทึกข้อมูลส่วนตัว'}
             </button>

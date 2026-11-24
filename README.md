@@ -25,7 +25,7 @@ StoreOutPanel.jsx
 ลบไฟล์ frontend/src/components/Product3DViewer.jsx
 2. ผลลัพธ์และประสิทธิภาพของระบบ
 ขนาดเว็บเล็กลงและโหลดเร็วขึ้น: เนื่องจากไม่มีการดึงไลบรารี Three.js เข้ามาในหน้าเว็บ ทำให้ขนาด JavaScript Bundle ลดลงจาก 1,367 kB เหลือเพียง 832 kB (ลดลงไปกว่า 40%)
-ความเสถียรของระบบหลัก: ระบบนำเข้าสินค้า (Store-In), ผังชั้นวางแบบ 2D, เบิกจ่ายสินค้า (Store-Out), สิทธิ์ผู้ใช้งาน (RBAC), เซ็นเซอร์ฮาร์ดแวร์ (ESP32/MQTT/เครน AS/RS) และฐานข้อมูล ยังคงทำงานได้ครบถ้วนสมบูรณ์ 100%
+ความเสถียรของระบบหลัก: ระบบนำเข้าสินค้า (Store-In), ผังชั้นวางแบบ 2D, เบิกจ่ายสินค้า (Store-Out), สิทธิ์ผู้ใช้งาน (RBAC), เซ็นเซอร์ฮาร์ดแวร์ (ESP32/WebSocket/เครน AS/RS) และฐานข้อมูล ยังคงทำงานได้ครบถ้วนสมบูรณ์ 100%
 3. การ Build และ Deploy ขึ้นระบบจริง
 Rebuild Docker Image: คอมไพล์และสร้าง Docker Image ของ Frontend ใหม่เสร็จสมบูรณ์
 Restart Container: อัปเดตและเริ่มการทำงานคอนเทนเนอร์ asrs_frontend ใหม่ (ทดสอบแล้วตอบสนอง HTTP 200 OK)
@@ -42,7 +42,7 @@ kittanay/smartwarehouse-frontend:latest
    - เครื่องมือสร้างและพิมพ์ฉลาก QR Code (Label Maker)
 3. **การควบคุมฮาร์ดแวร์ & IoT Telemetry:**
    - ควบคุมการเคลื่อนที่ของเครน 3 แกน (X, Y, Z) แบบ Manual และ Auto
-   - เชื่อมต่อบอร์ด ESP32 ผ่าน MQTT Broker (Mosquitto)
+   - เชื่อมต่อบอร์ด ESP32 ผ่าน Real-time WebSocket & REST Telemetry API
    - ระบบ Homing, Endstop Calibration, และ Emergency Stop (E-Stop)
 4. **ระบบความปลอดภัยและการจัดการสิทธิ์ (Role-Based Access):**
    - **Admin:** ดูภาพรวม Dashboard สถิติ สต็อกสินค้า และประวัติทั้งหมด
@@ -68,20 +68,13 @@ kittanay/smartwarehouse-frontend:latest
                        |    (Node.js + Socket.IO)      |
                        +-------+---------------+-------+
                                |               |
-                   Postgres    |               | MQTT Protocol
-                   (Port 5432) |               | (Port 1883)
+                   Postgres    |               | Real-time Telemetry
+                   (Port 5432) |               | (HTTP REST / WebSocket)
                                v               v
              +--------------------+     +--------------------+
-             | PostgreSQL 15 DB   |     | Mosquitto Broker   |
-             | (asrs_db)          |     | (asrs_mqtt)        |
-             +--------------------+     +---------+----------+
-                                                  |
-                                                  | Wi-Fi (MQTT)
-                                                  v
-                                        +--------------------+
-                                        | ESP32 AS/RS Crane  |
-                                        | Stepper Motors X,Y,Z|
-                                        | GM65 QR Scanner    |
+             | PostgreSQL 15 DB   |     | ESP32 AS/RS Crane  |
+             | (asrs_db)          |     | Stepper Motors X,Y,Z|
+             +--------------------+     | GM65 QR Scanner    |
                                         +--------------------+
 ```
 
@@ -91,11 +84,9 @@ kittanay/smartwarehouse-frontend:latest
 
 | ส่วนประกอบ | เทคโนโลยี / ไลบรารี |
 | :--- | :--- |
-| **Frontend** | React 18, Vite, Three.js, Lucide Icons, Socket.IO Client, Axios, HTML5-QRCode, QRCode.react |
-| **Backend** | Node.js, Express.js, Socket.IO, MQTT.js, PostgreSQL Client (`pg`), JWT, Bcrypt |
+| **Frontend** | React 18, Vite, Lucide Icons, Socket.IO Client, Axios, HTML5-QRCode, QRCode.react |
+| **Backend** | Node.js, Express.js, Socket.IO, PostgreSQL Client (`pg`), JWT, Bcrypt |
 | **Database** | PostgreSQL 15 Alpine |
-| **Message Broker** | Eclipse Mosquitto 2 (MQTT) |
-| **Firmware / IoT** | ESP32, Arduino C++, PubSubClient, ArduinoJson |
 | **DevOps** | Docker, Docker Compose, Nginx, Cloudflare Tunnel (`cloudflared`) |
 
 ---
@@ -120,7 +111,7 @@ cd SmartWarehouse
 ```
 
 ### ขั้นตอนที่ 2: สั่งรัน Docker Containers
-สั่ง Build และ Start คอนเทนเนอร์ทั้งหมด 5 ตัวขึ้นมาทำงานพร้อมกัน:
+สั่ง Build และ Start คอนเทนเนอร์ทั้งหมดขึ้นมาทำงานพร้อมกัน:
 ```bash
 docker-compose up -d --build
 ```
@@ -129,10 +120,9 @@ docker-compose up -d --build
 ```bash
 docker ps
 ```
-คุณควรจะเห็น Container 5 ตัวนี้ทำงานอยู่ในสถานะ `Up`:
+คุณควรจะเห็น Container เหล่านี้ทำงานอยู่ในสถานะ `Up`:
 * `asrs_frontend` (Port 80)
 * `asrs_backend` (Port 5000)
-* `asrs_mqtt` (Port 1883, 9001)
 * `asrs_db` (Port 5432)
 * `asrs_tunnel` (Cloudflare Tunnel)
 
@@ -162,8 +152,6 @@ docker ps
 | **Frontend Web** | `80` | `80` | หน้าเว็บ React UI (Nginx) |
 | **Backend API** | `5000` | `5000` | REST API & WebSockets |
 | **PostgreSQL DB** | `5432` | `5432` | ฐานข้อมูลคลังสินค้า |
-| **Mosquitto MQTT** | `1883` | `1883` | MQTT Broker สำหรับบอร์ด ESP32 |
-| **Mosquitto WS** | `9001` | `9001` | MQTT ผ่าน WebSockets |
 
 ---
 
@@ -173,14 +161,13 @@ docker ps
 
 1. เปิดไฟล์ด้วย **Arduino IDE**
 2. ติดตั้ง Library ที่จำเป็น:
-   - `PubSubClient` โดย Nick O'Leary
    - `ArduinoJson` โดย Benoit Blanchon
-3. ตั้งค่า Wi-Fi และ IP ของเครื่องคอมพิวเตอร์ที่รัน Mosquitto Broker:
+   - `HTTPClient` (มีมาพร้อมกับ ESP32 Board package อยู่แล้ว)
+3. ตั้งค่า Wi-Fi และ IP ของเครื่องคอมพิวเตอร์ Server:
    ```cpp
    const char* WIFI_SSID     = "ชื่อไวไฟของคุณ";
    const char* WIFI_PASSWORD = "รหัสผ่านไวไฟ";
-   const char* MQTT_SERVER   = "192.168.1.XXX"; // ใส่ IP เครื่อง Server ที่รัน Docker
-   const int   MQTT_PORT     = 1883;
+   const char* SERVER_HOST   = "http://192.168.1.XXX:5000"; // ใส่ IP เครื่อง Server ที่รัน Backend
    ```
 4. อัปโหลดลงบอร์ด ESP32
 

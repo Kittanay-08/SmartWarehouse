@@ -33,7 +33,7 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
             <span className="badge badge-cyan">Visual Matrix</span>
             <span className="badge badge-emerald">AS/RS Grid ({slots.length} Slots)</span>
           </div>
-          <h2 style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0f172a' }}>
+          <h2 style={{ fontSize: '1.65rem', fontWeight: 700, color: '#0f172a' }}>
             ผังชั้นวางสินค้าอัจฉริยะ ({slots.length} ช่อง)
           </h2>
           <p style={{ color: '#334155', fontSize: '0.95rem', fontWeight: 600 }}>
@@ -41,14 +41,19 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
           </p>
         </div>
 
-        <div style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 800, background: '#ffffff', padding: '8px 16px', borderRadius: '10px', border: '1.5px solid #bae6fd' }}>
-          ใช้งานอยู่ <strong style={{ color: '#0284c7' }}>{occupiedCount}</strong> / {slots.length} ช่อง
+        <div style={{ fontSize: '0.95rem', color: 'var(--text-main)', fontWeight: 600, background: 'var(--bg-card)', padding: '8px 16px', borderRadius: '10px', border: '1.5px solid var(--border-color)' }}>
+          ใช้งานอยู่ <strong style={{ color: 'var(--accent-sky)' }}>{occupiedCount}</strong> / {slots.length} ช่อง
         </div>
       </div>
 
-      {/* 3x3 Shelf Grid */}
-      <div className="glass-panel" style={{ padding: '22px', marginBottom: '20px', background: '#ffffff', border: '1.5px solid #bae6fd' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {/* Touch Pan Hint on Mobile */}
+      <div className="matrix-touch-hint" style={{ fontSize: '0.8rem', color: 'var(--text-dim)', textAlign: 'center', marginBottom: '8px', fontWeight: 700 }}>
+        ↔️ แตะและเลื่อนซ้าย-ขวาเพื่อดูผังแร็คครบทุกช่อง
+      </div>
+
+      {/* 3x3 Shelf Grid with Touch Scroll */}
+      <div className="glass-panel shelf-matrix-scroll-wrapper" style={{ padding: '22px', marginBottom: '20px', background: 'var(--bg-card)', border: '1.5px solid var(--border-color)', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <div style={{ minWidth: '460px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {levels.map(lvl => (
             <div key={lvl} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               {/* Level Indicator Badge */}
@@ -56,12 +61,12 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
                 width: '64px',
                 textAlign: 'center',
                 fontSize: '0.9rem',
-                fontWeight: 900,
-                color: '#0369a1',
-                background: '#e0f2fe',
+                fontWeight: 700,
+                color: 'var(--accent-sky)',
+                background: 'var(--bg-secondary)',
                 padding: '14px 4px',
                 borderRadius: '10px',
-                border: '1.5px solid #7dd3fc',
+                border: '1.5px solid var(--border-color)',
                 flexShrink: 0
               }}>
                 ชั้น {lvl}
@@ -80,41 +85,19 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
                     <div
                       key={slot.slot_id}
                       onClick={() => setInspectSlot(slot)}
-                      style={{
-                        padding: '10px 10px',
-                        borderRadius: '10px',
-                        background: isCurrentTarget
-                          ? '#fef3c7'
-                          : isOccupied 
-                          ? '#fee2e2' 
-                          : '#dcfce7',
-                        border: `2px solid ${
-                          isCurrentTarget 
-                            ? '#f59e0b' 
-                            : isOccupied 
-                            ? '#fca5a5' 
-                            : '#86efac'
-                        }`,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                        position: 'relative',
-                        minHeight: '74px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        boxShadow: '0 2px 6px rgba(0, 0, 0, 0.02)'
-                      }}
+                      className={`shelf-slot-card ${
+                        isCurrentTarget ? 'shelf-slot-target' : isOccupied ? 'shelf-slot-occupied' : 'shelf-slot-empty'
+                      }`}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{
-                          fontWeight: 900,
+                          fontWeight: 700,
                           fontSize: '0.9rem',
-                          color: isOccupied ? '#b91c1c' : '#15803d',
                           fontFamily: 'var(--font-mono)'
                         }}>
                           {slot.slot_code}
                         </span>
-                        <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 800 }}>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontWeight: 600 }}>
                           X:{slot.x_axis} Y:{slot.y_axis}
                         </span>
                       </div>
@@ -123,12 +106,11 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
                         <div style={{
                           fontFamily: 'var(--font-mono)',
                           fontSize: '0.78rem',
-                          fontWeight: 800,
-                          color: '#b91c1c',
-                          background: '#ffffff',
-                          padding: '2px 4px',
-                          borderRadius: '4px',
-                          border: '1px solid #fecdd3',
+                          fontWeight: 600,
+                          background: 'var(--bg-card)',
+                          padding: '3px 6px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-color)',
                           margin: '2px 0',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
@@ -137,7 +119,7 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
                           🔲 {slot.qr_code || 'QR-CODE'}
                         </div>
                       ) : (
-                        <div style={{ textAlign: 'center', color: '#15803d', fontSize: '0.8rem', fontWeight: 800 }}>
+                        <div style={{ textAlign: 'center', fontSize: '0.82rem', fontWeight: 600 }}>
                           ✨ ว่าง (คลิก)
                         </div>
                       )}
@@ -152,17 +134,21 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
 
       {/* Inspect Slot Modal */}
       {inspectSlot && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '20px'
-        }}>
+        <div 
+          className="modal-overlay" 
+          role="dialog" 
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }}>
           <div className="glass-panel animate-fade-in" style={{
             maxWidth: '480px',
             width: '100%',
@@ -175,13 +161,13 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Info size={22} color="#0284c7" />
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a' }}>
                   รายละเอียดช่อง {inspectSlot.slot_code}
                 </h3>
               </div>
               <button 
                 onClick={() => setInspectSlot(null)}
-                style={{ background: 'transparent', border: 'none', color: '#64748b', fontSize: '1.4rem', cursor: 'pointer', fontWeight: 800 }}
+                style={{ background: 'transparent', border: 'none', color: '#64748b', fontSize: '1.4rem', cursor: 'pointer', fontWeight: 600 }}
               >
                 ✕
               </button>
@@ -197,7 +183,7 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
 
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#64748b', fontWeight: 700 }}>พิกัดเครน AS/RS:</span>
-                <span style={{ fontFamily: 'var(--font-mono)', color: '#0284c7', fontWeight: 900 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', color: '#0284c7', fontWeight: 700 }}>
                   X:{inspectSlot.x_axis} | Y:{inspectSlot.y_axis} | Z:{inspectSlot.z_axis}
                 </span>
               </div>
@@ -206,19 +192,15 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b', fontWeight: 700 }}>ชื่อสินค้า:</span>
-                    <strong style={{ color: '#0f172a', fontWeight: 800 }}>{inspectSlot.product_name}</strong>
+                    <strong style={{ color: '#0f172a', fontWeight: 600 }}>{inspectSlot.product_name}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b', fontWeight: 700 }}>รหัส QR Code / SKU:</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', color: '#0284c7', fontWeight: 800 }}>{inspectSlot.qr_code}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: '#0284c7', fontWeight: 600 }}>{inspectSlot.qr_code}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b', fontWeight: 700 }}>หมวดหมู่:</span>
-                    <span style={{ color: '#0f172a', fontWeight: 800 }}>{inspectSlot.category || 'General'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#64748b', fontWeight: 700 }}>น้ำหนัก:</span>
-                    <span style={{ color: '#0f172a', fontWeight: 800 }}>{inspectSlot.weight_kg || 0} kg</span>
+                    <span style={{ color: '#0f172a', fontWeight: 600 }}>{inspectSlot.category || 'General'}</span>
                   </div>
 
                   <div style={{
@@ -244,7 +226,7 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
                     />
                     <div style={{
                       fontSize: '0.78rem',
-                      fontWeight: 800,
+                      fontWeight: 600,
                       color: '#0369a1',
                       background: '#e0f2fe',
                       padding: '3px 8px',
@@ -266,7 +248,7 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
                   }}
                   disabled={craneState.status !== 'IDLE'}
                   className="btn btn-primary"
-                  style={{ width: '100%', padding: '12px', fontSize: '1rem', fontWeight: 900 }}
+                  style={{ width: '100%', padding: '12px', fontSize: '1rem', fontWeight: 700 }}
                 >
                   <ArrowUpFromLine size={18} /> สั่งเบิกจ่ายสินค้านี้
                 </button>
@@ -277,7 +259,7 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
                     setInspectSlot(null);
                   }}
                   className="btn btn-success"
-                  style={{ width: '100%', padding: '12px', fontSize: '1rem', fontWeight: 900 }}
+                  style={{ width: '100%', padding: '12px', fontSize: '1rem', fontWeight: 700 }}
                 >
                   <ArrowDownToLine size={18} /> นำสินค้าเข้าช่องนี้
                 </button>
@@ -326,7 +308,7 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
               <AlertTriangle size={36} />
             </div>
 
-            <h3 style={{ fontSize: '1.28rem', fontWeight: 900, color: '#0f172a', marginBottom: '18px' }}>
+            <h3 style={{ fontSize: '1.28rem', fontWeight: 700, color: '#0f172a', marginBottom: '18px' }}>
               ยืนยันการสั่งเบิกจ่ายสินค้า?
             </h3>
 
@@ -339,8 +321,8 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
               marginBottom: '24px',
               textAlign: 'left'
             }}>
-              <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#0f172a', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '3px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 800 }}>
+              <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#0f172a', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '3px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>
                   {confirmStoreOutSlot.category || 'General'}
                 </span>
                 <span>{confirmStoreOutSlot.product_name}</span>
@@ -348,22 +330,16 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
               <div style={{ fontSize: '0.86rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>📍 <strong>ช่องจัดเก็บ:</strong></span>
-                  <span style={{ fontWeight: 800, color: '#0f172a' }}>{confirmStoreOutSlot.slot_code} (ชั้น {confirmStoreOutSlot.level}, ช่อง {confirmStoreOutSlot.bay})</span>
+                  <span style={{ fontWeight: 600, color: '#0f172a' }}>{confirmStoreOutSlot.slot_code} (ชั้น {confirmStoreOutSlot.level}, ช่อง {confirmStoreOutSlot.bay})</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>🎯 <strong>พิกัด AS/RS:</strong></span>
-                  <span style={{ fontWeight: 800, color: '#0284c7', fontFamily: 'monospace' }}>X:{confirmStoreOutSlot.x_axis} | Y:{confirmStoreOutSlot.y_axis} | Z:{confirmStoreOutSlot.z_axis}</span>
+                  <span style={{ fontWeight: 600, color: '#0284c7', fontFamily: 'monospace' }}>X:{confirmStoreOutSlot.x_axis} | Y:{confirmStoreOutSlot.y_axis} | Z:{confirmStoreOutSlot.z_axis}</span>
                 </div>
                 {confirmStoreOutSlot.lot_number && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>🔢 <strong>ล็อตสินค้า:</strong></span>
                     <span style={{ fontWeight: 700, color: '#0f172a' }}>{confirmStoreOutSlot.lot_number}</span>
-                  </div>
-                )}
-                {confirmStoreOutSlot.weight_kg && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>⚖️ <strong>น้ำหนัก:</strong></span>
-                    <span style={{ fontWeight: 800, color: '#0f172a' }}>{confirmStoreOutSlot.weight_kg} kg</span>
                   </div>
                 )}
               </div>
@@ -375,7 +351,7 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
                 type="button"
                 onClick={() => setConfirmStoreOutSlot(null)}
                 className="btn btn-secondary"
-                style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 800 }}
+                style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 600 }}
               >
                 ✕ ยกเลิก
               </button>
@@ -391,7 +367,7 @@ export const ShelfMatrix2D = ({ onSelectSlotForStoreIn }) => {
                   flex: 1.5,
                   padding: '12px',
                   fontSize: '0.95rem',
-                  fontWeight: 900,
+                  fontWeight: 700,
                   background: 'linear-gradient(135deg, #0284c7, #0369a1)',
                   boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
                   display: 'flex',

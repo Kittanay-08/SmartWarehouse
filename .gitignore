@@ -1,0 +1,27 @@
+# ===== Dependencies & build output =====
+node_modules/
+frontend/dist/
+
+# ===== Secrets / local data (repo นี้เป็นสาธารณะ ห้ามขึ้น) =====
+.env
+.env.*
+backend/data/users.json
+backup_warehouse.sql
+
+# ===== Deploy artifacts & backups =====
+*.zip
+*.bak
+*.ps1
+
+# ===== Local tool / AI output folders =====
+.agents/
+.codex/
+.impeccable/
+Claude outputs/
+skills-lock.json
+
+# ===== OS / editor =====
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/

@@ -3,33 +3,30 @@
  * SMART WAREHOUSE AS/RS - ESP32 IOT FIRMWARE (C++ ARDUINO)
  * ==============================================================================
  * Features:
- *  - Wi-Fi & MQTT Client (PubSubClient)
+ *  - Wi-Fi & REST/WebSocket Telemetry Engine
  *  - AS/RS 3-Axis Stepper Motor Control (X-Axis, Y-Axis, Z-Fork Extension)
  *  - Limit Switch Endstop Homing & Calibration
  *  - 2D QR Barcode Scanner (Hardware Serial2: GM65 / Barcode Engine)
- *  - Telemetry Telecasting & Heartbeat Ping to Web Dashboard
+ *  - Realtime Telemetry Telecasting & Heartbeat Ping to Web Dashboard
  *  - Emergency Stop Handling
  * ==============================================================================
  */
 
 #include <WiFi.h>
-#include <PubSubClient.h>
+#include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-// --- 1. NETWORK & MQTT CONFIGURATION ---
+// --- 1. NETWORK & TELEMETRY CONFIGURATION ---
 const char* WIFI_SSID     = "YOUR_WIFI_SSID";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-const char* MQTT_SERVER   = "192.168.1.100"; // IP address of Mosquitto Broker or Server
-const int   MQTT_PORT     = 1883;
+const char* SERVER_HOST   = "http://192.168.1.100:5000"; // Backend API host
 
-// MQTT Topics
-const char* TOPIC_CMD       = "warehouse/asrs/cmd";
-const char* TOPIC_TELEMETRY = "warehouse/asrs/telemetry";
-const char* TOPIC_STATUS    = "warehouse/asrs/status";
-const char* TOPIC_PING      = "warehouse/esp32/ping";
+// Telemetry Endpoints
+const char* API_TELEMETRY = "http://192.168.1.100:5000/api/asrs/telemetry";
+const char* API_PING      = "http://192.168.1.100:5000/api/asrs/ping";
+const char* API_QR        = "http://192.168.1.100:5000/api/asrs/scan";
 
 WiFiClient espClient;
-PubSubClient client(espClient);
 
 // --- 2. STEPPER MOTOR PINOUTS (A4988 / DRV8825 / TMC2209) ---
 // X-Axis (Horizontal Carriage)
@@ -70,8 +67,6 @@ const int STEPS_PER_UNIT_Z = 500;
 
 // Function Prototypes
 void setupWiFi();
-void reconnectMQTT();
-void mqttCallback(char* topic, byte* payload, unsigned int length);
 void moveMotor(int stepPin, int dirPin, int steps, bool dir, int speedDelay);
 void moveToCoordinates(float targetX, float targetY, float targetZ);
 void extendFork();
@@ -102,18 +97,12 @@ void setup() {
 
   Serial.println("\n🚀 Initializing Smart Warehouse AS/RS ESP32 Master Node...");
   setupWiFi();
-  client.setServer(MQTT_SERVER, MQTT_PORT);
-  client.setCallback(mqttCallback);
 
+  publishTelemetry("ONLINE", "ESP32 AS/RS Master Online via REST API");
   homeAllAxes();
 }
 
 void loop() {
-  if (!client.connected()) {
-    reconnectMQTT();
-  }
-  client.loop();
-
   // Read QR Scanner Serial Data
   if (Serial2.available()) {
     String scannedQR = Serial2.readStringUntil('\n');
@@ -122,30 +111,42 @@ void loop() {
       Serial.print("📷 Scanned QR Code: ");
       Serial.println(scannedQR);
 
-      // Publish to MQTT
-      StaticJsonDocument<200> doc;
-      doc["device"] = "ESP32_ASRS_MASTER";
-      doc["scanned_qr"] = scannedQR;
-      doc["timestamp"] = millis();
-      char buffer[256];
-      serializeJson(doc, buffer);
-      client.publish("warehouse/asrs/qr_scanned", buffer);
+      // Post QR scan event to Backend API
+      if (WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+        http.begin(API_QR);
+        http.addHeader("Content-Type", "application/json");
+        StaticJsonDocument<200> doc;
+        doc["device"] = "ESP32_ASRS_MASTER";
+        doc["scanned_qr"] = scannedQR;
+        doc["timestamp"] = millis();
+        char buffer[256];
+        serializeJson(doc, buffer);
+        http.POST(buffer);
+        http.end();
+      }
     }
   }
 
   // Periodic Telemetry / Heartbeat Ping (Every 5 seconds)
   if (millis() - lastPingTime > 5000) {
     lastPingTime = millis();
-    StaticJsonDocument<200> pingDoc;
-    pingDoc["device"] = "ESP32_ASRS_MASTER";
-    pingDoc["uptime_s"] = millis() / 1000;
-    pingDoc["status"] = isEmergencyStop ? "EMERGENCY_STOP" : "ONLINE";
-    pingDoc["x"] = currentX;
-    pingDoc["y"] = currentY;
-    pingDoc["z"] = currentZ;
-    char pingBuf[256];
-    serializeJson(pingDoc, pingBuf);
-    client.publish(TOPIC_PING, pingBuf);
+    if (WiFi.status() == WL_CONNECTED) {
+      HTTPClient http;
+      http.begin(API_PING);
+      http.addHeader("Content-Type", "application/json");
+      StaticJsonDocument<200> pingDoc;
+      pingDoc["device"] = "ESP32_ASRS_MASTER";
+      pingDoc["uptime_s"] = millis() / 1000;
+      pingDoc["status"] = isEmergencyStop ? "EMERGENCY_STOP" : "ONLINE";
+      pingDoc["x"] = currentX;
+      pingDoc["y"] = currentY;
+      pingDoc["z"] = currentZ;
+      char pingBuf[256];
+      serializeJson(pingDoc, pingBuf);
+      http.POST(pingBuf);
+      http.end();
+    }
   }
 }
 
@@ -297,6 +298,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 void publishTelemetry(const char* statusStr, const char* desc) {
+  if (WiFi.status() != WL_CONNECTED) return;
+
   StaticJsonDocument<300> doc;
   doc["status"] = statusStr;
   doc["currentX"] = currentX;
@@ -309,7 +312,12 @@ void publishTelemetry(const char* statusStr, const char* desc) {
 
   char buffer[350];
   serializeJson(doc, buffer);
-  client.publish(TOPIC_TELEMETRY, buffer);
+
+  HTTPClient http;
+  http.begin(API_TELEMETRY);
+  http.addHeader("Content-Type", "application/json");
+  http.POST(buffer);
+  http.end();
 }
 
 void setupWiFi() {
@@ -321,20 +329,4 @@ void setupWiFi() {
     Serial.print(".");
   }
   Serial.println("\n✅ WiFi Connected. IP: " + WiFi.localIP().toString());
-}
-
-void reconnectMQTT() {
-  while (!client.connected()) {
-    Serial.print("Connecting to MQTT Broker...");
-    if (client.connect("ESP32_ASRS_MASTER_CLIENT")) {
-      Serial.println(" Connected!");
-      client.subscribe(TOPIC_CMD);
-      publishTelemetry("ONLINE", "ESP32 AS/RS Master Online");
-    } else {
-      Serial.print(" Failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" Retrying in 5 seconds...");
-      delay(5000);
-    }
-  }
 }

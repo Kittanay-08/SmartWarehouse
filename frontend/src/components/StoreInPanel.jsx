@@ -36,10 +36,12 @@ import {
   ChevronDown,
   ChevronUp,
   Scale,
-  CornerDownLeft
+  CornerDownLeft,
+  SwitchCamera,
+  Flashlight
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { useWarehouse } from '../context/WarehouseContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -63,14 +65,20 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   // Lot Number Generator Helper
   const generateLotNumber = () => `LOT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
 
-  // Form States (Blank by default for Product Name/Cat/Weight, with Auto Lot Number)
+  // Form States (Blank by default for Product Name/Cat, with Auto Lot Number)
   const [qrCode, setQrCode] = useState('');
   const [productName, setProductName] = useState('');
   const [category, setCategory] = useState('');
-  const [weightKg, setWeightKg] = useState('');
   const [lotNumber, setLotNumber] = useState(generateLotNumber());
   const [selectedSlotId, setSelectedSlotId] = useState('');
   const [showCamera, setShowCamera] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState('environment'); // 'environment' (หลัง) or 'user' (หน้า)
+  const [availableCameras, setAvailableCameras] = useState([]);
+  const [selectedCameraIndex, setSelectedCameraIndex] = useState(0);
+  const [isTorchSupported, setIsTorchSupported] = useState(false);
+  const [isTorchOn, setIsTorchOn] = useState(false);
+  const [cameraLoading, setCameraLoading] = useState(false);
+  const [cameraError, setCameraError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
   const [slotError, setSlotError] = useState(false);
@@ -79,10 +87,26 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   const scannerRef = useRef(null);
   const isScanProcessedRef = useRef(false);
   const processIncomingQrCodeRef = useRef(null);
+  const isSwitchingCameraRef = useRef(false);
 
   // Safe helper to physically turn off camera hardware and clear scanner instance
-  const closeCamera = () => {
-    // 1. Physically stop active MediaStream tracks on all video elements inside qr-reader-inbound
+  const stopScannerInstance = async () => {
+    if (scannerRef.current) {
+      const sc = scannerRef.current;
+      scannerRef.current = null;
+      try {
+        if (sc.isScanning) {
+          await sc.stop();
+        }
+      } catch (err) {
+        console.warn('Scanner stop note:', err?.message || err);
+      }
+      try {
+        sc.clear();
+      } catch (e) {}
+    }
+
+    // Physically stop active MediaStream tracks on all video elements inside qr-reader-inbound
     try {
       const container = document.getElementById('qr-reader-inbound');
       if (container) {
@@ -97,17 +121,13 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
         });
       }
     } catch (e) {}
+  };
 
-    // 2. Safely clear the Html5QrcodeScanner instance
-    if (scannerRef.current) {
-      const sc = scannerRef.current;
-      scannerRef.current = null;
-      try {
-        sc.clear().catch(() => {});
-      } catch (e) {}
-    }
-
-    // 3. Close the camera UI in React state
+  const closeCamera = async () => {
+    await stopScannerInstance();
+    setIsTorchOn(false);
+    setIsTorchSupported(false);
+    setCameraError(null);
     setShowCamera(false);
   };
   
@@ -157,8 +177,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   const isProductInfoFilled = Boolean(
     qrCode && qrCode.trim() &&
     productName && productName.trim() &&
-    category && category.trim() &&
-    weightKg && !isNaN(Number(weightKg)) && Number(weightKg) > 0
+    category && category.trim()
   );
 
   // Sync when preSelectedSlot prop changes (only if product info is already provided)
@@ -187,7 +206,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     }
   }, [selectedSlotId]);
 
-  // Handle incoming QR / Barcode scan from ESP32-CAM via MQTT
+  // Handle incoming QR / Barcode scan from ESP32-CAM via WebSocket
   useEffect(() => {
     if (lastScannedQr && lastScannedQr.code) {
       console.log('📷 ESP32-CAM Scanned Code received:', lastScannedQr.code);
@@ -229,7 +248,6 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
         if (parsed.qrCode) extractedQr = parsed.qrCode;
         if (parsed.name) extractedName = parsed.name;
         if (parsed.category) extractedCat = parsed.category;
-        if (parsed.weight) extractedWeight = String(parsed.weight);
         if (parsed.lot) extractedLot = parsed.lot;
         if (parsed.slotCode) {
           extractedSlotCode = parsed.slotCode;
@@ -251,14 +269,12 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     if (occupiedSlotMatch) {
       const occName = occupiedSlotMatch.product_name || extractedName || '';
       const occCat = occupiedSlotMatch.category || extractedCat || '';
-      const occWeight = occupiedSlotMatch.weight_kg ? String(occupiedSlotMatch.weight_kg) : (extractedWeight || '');
       const occLot = occupiedSlotMatch.lot_number || extractedLot || generateLotNumber();
 
       setAlreadyOccupiedSlot(occupiedSlotMatch);
       setAllowAdditionalStoreIn(false);
       setProductName(occName);
       setCategory(occCat);
-      setWeightKg(occWeight);
       setLotNumber(occLot);
       setSelectedSlotId(''); // Clear previous slot selection so user picks new empty slot
       setIsLabelPrinted(false);
@@ -266,7 +282,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
       setMessage({
         type: 'warning',
-        text: `⚠️ ตรวจพบสินค้านี้ในคลังแล้ว (จัดเก็บอยู่ที่ช่อง ${occupiedSlotMatch.slot_code}) สามารถคลิกปุ่ม "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่มลงช่องว่างใหม่ได้`
+        text: `ตรวจพบสินค้านี้ในคลังแล้ว (จัดเก็บอยู่ที่ช่อง ${occupiedSlotMatch.slot_code}) สามารถคลิกปุ่ม "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่มลงช่องว่างใหม่ได้`
       });
       return;
     }
@@ -278,7 +294,6 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     // Look up known product from persistent self-learning catalog or past transactions
     let finalName = '';
     let finalCat = '';
-    let finalWeight = '';
     let finalLot = extractedLot || '';
 
     const knownFromCatalog = lookupProduct(extractedQr);
@@ -287,22 +302,18 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     if (extractedName) {
       finalName = extractedName;
       if (extractedCat) finalCat = extractedCat;
-      if (extractedWeight) finalWeight = extractedWeight;
     } else if (knownFromCatalog) {
       finalName = knownFromCatalog.name || '';
       finalCat = knownFromCatalog.category || '';
-      finalWeight = knownFromCatalog.weight ? String(knownFromCatalog.weight) : '';
     } else if (pastLog) {
       finalName = pastLog.product_name || '';
       finalCat = pastLog.category || '';
-      finalWeight = pastLog.weight_kg ? String(pastLog.weight_kg) : '';
       if (pastLog.lot_number) finalLot = pastLog.lot_number;
     }
 
     // Set form fields
     setProductName(finalName);
     setCategory(finalCat);
-    setWeightKg(finalWeight);
     setLotNumber(finalLot || lotNumber || generateLotNumber());
 
     const isRecognized = Boolean(knownFromCatalog || pastLog || extractedName);
@@ -310,15 +321,14 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       code: extractedQr,
       name: finalName || 'สินค้าใหม่',
       category: finalCat || 'ยังไม่ระบุหมวดหมู่',
-      weight: finalWeight || '1.0',
       lot: finalLot || lotNumber || generateLotNumber(),
       isExisting: isRecognized,
       isOccupied: false,
       occupiedSlot: null,
       sourceLabel: knownFromCatalog 
-        ? 'ฐานข้อมูลสินค้าหลัก (Product Catalog)' 
+        ? 'ฐานข้อมูลสินค้าหลัก' 
         : pastLog 
-          ? 'ประวัติการนำเข้าล่าสุด (Recent Transactions)' 
+          ? 'ประวัติการนำเข้าล่าสุด' 
           : 'สินค้าใหม่ (พร้อมบันทึก)',
       timestamp: new Date().toLocaleTimeString('th-TH')
     });
@@ -360,14 +370,12 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       setAlreadyOccupiedSlot(occupiedSlotMatch);
       setProductName(occupiedSlotMatch.product_name || '');
       setCategory(occupiedSlotMatch.category || '');
-      setWeightKg(occupiedSlotMatch.weight_kg ? String(occupiedSlotMatch.weight_kg) : '');
       if (occupiedSlotMatch.lot_number) setLotNumber(occupiedSlotMatch.lot_number);
       setSelectedSlotId('');
       setScannedProductInfo({
         code: trimmed,
         name: occupiedSlotMatch.product_name || 'สินค้าในคลัง',
         category: occupiedSlotMatch.category || 'ทั่วไป',
-        weight: occupiedSlotMatch.weight_kg ? String(occupiedSlotMatch.weight_kg) : '1.0',
         lot: occupiedSlotMatch.lot_number || '-',
         isExisting: true,
         isOccupied: true,
@@ -382,34 +390,30 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     } else if (known) {
       setProductName(known.name || '');
       setCategory(known.category || '');
-      setWeightKg(known.weight ? String(known.weight) : '');
       setScannedProductInfo({
         code: trimmed,
         name: known.name,
         category: known.category,
-        weight: known.weight ? String(known.weight) : '1.0',
         lot: lotNumber || generateLotNumber(),
         isExisting: true,
         isOccupied: false,
         occupiedSlot: null,
-        sourceLabel: 'ฐานข้อมูลสินค้าหลัก (Product Catalog)',
+        sourceLabel: 'ฐานข้อมูลสินค้าหลัก',
         timestamp: new Date().toLocaleTimeString('th-TH')
       });
     } else if (pastLog) {
       setProductName(pastLog.product_name || '');
       setCategory(pastLog.category || '');
-      setWeightKg(pastLog.weight_kg ? String(pastLog.weight_kg) : '');
       if (pastLog.lot_number) setLotNumber(pastLog.lot_number);
       setScannedProductInfo({
         code: trimmed,
         name: pastLog.product_name,
         category: pastLog.category,
-        weight: pastLog.weight_kg ? String(pastLog.weight_kg) : '1.0',
         lot: pastLog.lot_number || '-',
         isExisting: true,
         isOccupied: false,
         occupiedSlot: null,
-        sourceLabel: 'ประวัติการนำเข้าล่าสุด (Recent Inbound)',
+        sourceLabel: 'ประวัติการนำเข้าล่าสุด',
         timestamp: new Date().toLocaleTimeString('th-TH')
       });
     } else if (trimmed.length >= 3) {
@@ -417,7 +421,6 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
         code: trimmed,
         name: productName || 'สินค้าใหม่',
         category: category || 'ทั่วไป',
-        weight: weightKg || '1.0',
         lot: lotNumber || generateLotNumber(),
         isExisting: false,
         isOccupied: false,
@@ -439,8 +442,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       e.preventDefault();
       if (!productName?.trim()) {
         document.getElementById('product-name-input')?.focus();
-      } else if (!weightKg || parseFloat(weightKg) <= 0) {
-        document.getElementById('product-weight-input')?.focus();
+      } else if (!category) {
+        document.getElementById('product-category-select')?.focus();
       }
     }
   };
@@ -451,67 +454,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       e.preventDefault();
       if (!category) {
         document.getElementById('product-category-select')?.focus();
-      } else if (!weightKg || parseFloat(weightKg) <= 0) {
-        document.getElementById('product-weight-input')?.focus();
       }
-    }
-  };
-
-  // Confirm weight value and auto-open storage slot selection modal on Enter key
-  const handleConfirmWeight = (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-
-    const parsedWeight = parseFloat(weightKg);
-    if (!weightKg || isNaN(parsedWeight) || parsedWeight <= 0) {
-      setMessage({
-        type: 'error',
-        text: '⚠️ กรุณาระบุน้ำหนักสินค้า (kg) ให้ถูกต้องและมากกว่า 0 ก่อนกดยืนยัน'
-      });
-      return;
-    }
-
-    const cleanWeight = String(parsedWeight);
-    setWeightKg(cleanWeight);
-
-    if (isBlockedByOccupied) {
-      setMessage({
-        type: 'error',
-        text: `🛑 สินค้ารหัสนี้ถูกจัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากด "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม`
-      });
-      return;
-    }
-
-    const hasQr = Boolean(qrCode && qrCode.trim());
-    const hasName = Boolean(productName && productName.trim());
-    const hasCat = Boolean(category && category.trim());
-    const isReady = hasQr && hasName && hasCat && parsedWeight > 0;
-
-    if (isReady) {
-      setMessage({
-        type: 'success',
-        text: `⚖️ บันทึกน้ำหนัก ${cleanWeight} kg เรียบร้อย! เปิดหน้าต่างผังเลือกช่องจัดเก็บสินค้าให้อัตโนมัติ`
-      });
-      if (document.activeElement && document.activeElement.blur) {
-        document.activeElement.blur();
-      }
-      setShowSlotSelector(true);
-    } else {
-      const missing = [];
-      if (!hasQr) missing.push('รหัส QR/บาร์โค้ด');
-      if (!hasName) missing.push('ชื่อสินค้า');
-      if (!hasCat) missing.push('หมวดหมู่');
-      setMessage({
-        type: 'warning',
-        text: `⚖️ บันทึกน้ำหนัก ${cleanWeight} kg สำเร็จ! แต่ยังขาด: ${missing.join(', ')} (กรุณากรอกให้ครบเพื่อปลดล็อกการเลือกช่องจัดเก็บ)`
-      });
-    }
-  };
-
-  // Handle Enter key on Weight input field
-  const handleWeightKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleConfirmWeight(e);
     }
   };
 
@@ -523,16 +466,16 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     if (!isProductInfoFilled) {
       setMessage({
         type: 'error',
-        text: '⚠️ จำเป็นต้องระบุข้อมูลสินค้า (รหัส QR/บาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะเลือกหรือแนะนำช่องจัดเก็บได้'
+        text: 'จำเป็นต้องระบุข้อมูลสินค้า (รหัส QR/บาร์โค้ด, ชื่อสินค้า และหมวดหมู่) ให้ครบถ้วนก่อน จึงจะเลือกหรือแนะนำช่องจัดเก็บได้'
       });
       return;
     }
     if (isBlockedByOccupied) {
-      setMessage({ type: 'warning', text: `⚠️ สินค้าชิ้นนี้มีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากดปุ่ม "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม` });
+      setMessage({ type: 'warning', text: `สินค้าชิ้นนี้มีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากดปุ่ม "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม` });
       return;
     }
     if (emptySlots.length === 0) {
-      setMessage({ type: 'error', text: '⚠️ คลังสินค้าเต็มทุกช่องแล้ว ไม่สามารถจัดเก็บเพิ่มได้' });
+      setMessage({ type: 'error', text: 'คลังสินค้าเต็มทุกช่องแล้ว ไม่สามารถจัดเก็บเพิ่มได้' });
       return;
     }
     const sorted = [...emptySlots].sort((a, b) => a.level - b.level || a.bay - b.bay);
@@ -548,7 +491,6 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     setProductName(log.product_name || '');
     setQrCode(log.qr_code || '');
     setCategory(log.category || '');
-    setWeightKg(log.weight_kg ? String(log.weight_kg) : '');
     setLotNumber(log.lot_number || generateLotNumber());
     setSelectedSlotId('');
     setIsLabelPrinted(false);
@@ -557,7 +499,6 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       code: log.qr_code || '',
       name: log.product_name || '',
       category: log.category || 'ทั่วไป',
-      weight: log.weight_kg ? String(log.weight_kg) : '1.0',
       lot: log.lot_number || '-',
       isExisting: true,
       isOccupied: false,
@@ -577,41 +518,16 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   });
 
   // Handler invoked immediately upon detecting a valid barcode / QR code
-  const handleScanSuccess = (decodedText) => {
+  const handleScanSuccess = async (decodedText) => {
     if (isScanProcessedRef.current) return;
     isScanProcessedRef.current = true;
 
     console.log('✅ Barcode/QR Code scanned successfully:', decodedText);
 
-    // 1. Physically shut down the camera hardware immediately
-    try {
-      const container = document.getElementById('qr-reader-inbound');
-      if (container) {
-        const videos = container.querySelectorAll('video');
-        videos.forEach(v => {
-          if (v.srcObject && typeof v.srcObject.getTracks === 'function') {
-            v.srcObject.getTracks().forEach(track => {
-              try { track.stop(); } catch (e) {}
-            });
-            v.srcObject = null;
-          }
-        });
-      }
-    } catch (e) {}
+    // 1. Physically shut down camera hardware immediately
+    await closeCamera();
 
-    // 2. Clear scanner instance safely
-    if (scannerRef.current) {
-      const sc = scannerRef.current;
-      scannerRef.current = null;
-      try {
-        sc.clear().catch(() => {});
-      } catch (e) {}
-    }
-
-    // 3. Close camera UI (hide camera view)
-    setShowCamera(false);
-
-    // 4. Fill product details into form and play scan audio beep
+    // 2. Fill product details into form and play scan audio beep
     try {
       if (processIncomingQrCodeRef.current) {
         processIncomingQrCodeRef.current(decodedText);
@@ -622,78 +538,192 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     }
   };
 
-  // High-Clarity Camera QR & 1D Barcode Scanner Handler
+  // Start Html5Qrcode Scanner with optimal barcode/QR detection settings
+  const startScannerInstance = async (facingModeChoice, cameraIndexChoice) => {
+    const container = document.getElementById('qr-reader-inbound');
+    if (!container) return;
+
+    setCameraLoading(true);
+    setCameraError(null);
+    isScanProcessedRef.current = false;
+
+    // Stop existing scanner
+    await stopScannerInstance();
+
+    try {
+      // 1. Get and remember cameras
+      let cams = availableCameras;
+      if (!cams || cams.length === 0) {
+        try {
+          cams = await Html5Qrcode.getCameras();
+          if (cams && cams.length > 0) {
+            setAvailableCameras(cams);
+          }
+        } catch (e) {
+          console.warn('GetCameras fallback:', e);
+        }
+      }
+
+      const formatsToSupport = [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.DATA_MATRIX,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.CODABAR
+      ];
+
+      const html5QrCode = new Html5Qrcode('qr-reader-inbound', {
+        formatsToSupport,
+        verbose: false
+      });
+      scannerRef.current = html5QrCode;
+
+      const currentMode = facingModeChoice || cameraFacing || 'environment';
+      const isBack = currentMode === 'environment';
+
+      let cameraConfig;
+      if (cams && cams.length > 0 && typeof cameraIndexChoice === 'number' && cams[cameraIndexChoice]) {
+        cameraConfig = cams[cameraIndexChoice].id;
+      } else {
+        cameraConfig = { facingMode: currentMode };
+      }
+
+      const scanConfig = {
+        fps: 12, // 12 FPS gives optimal processing time for ZXing binarizer without dropping frames
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          // Generous wide rectangle covering both horizontal 1D barcodes and 2D QR codes
+          const width = Math.min(Math.floor(viewfinderWidth * 0.92), 480);
+          const height = Math.min(Math.floor(viewfinderHeight * 0.72), 260);
+          return { width: Math.max(width, 240), height: Math.max(height, 180) };
+        },
+        aspectRatio: 1.333333,
+        disableFlip: isBack, // CRITICAL: NEVER mirror back camera! Mirrored barcodes fail to decode!
+        videoConstraints: {
+          facingMode: currentMode,
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
+          focusMode: 'continuous',
+          advanced: [{ focusMode: 'continuous' }]
+        }
+      };
+
+      await html5QrCode.start(
+        cameraConfig,
+        scanConfig,
+        (decodedText) => {
+          handleScanSuccess(decodedText);
+        },
+        () => {
+          // Normal frame pass without barcode
+        }
+      );
+
+      // Check torch capabilities
+      try {
+        const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
+        if (capabilities && typeof capabilities.torchFeature === 'function') {
+          setIsTorchSupported(capabilities.torchFeature().isSupported());
+        }
+      } catch (e) {}
+
+      setCameraLoading(false);
+    } catch (err) {
+      console.error('Error starting camera scanner:', err);
+      setCameraLoading(false);
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes('NotAllowedError') || errMsg.includes('Permission')) {
+        setCameraError('🔒 ไม่สามารถเข้าถึงกล้องได้: กรุณากด "อนุญาต (Allow)" การเข้าถึงกล้องบนเบราว์เซอร์');
+      } else if (errMsg.includes('NotFoundError') || errMsg.includes('DevicesNotFoundError')) {
+        setCameraError('📷 ไม่พบอุปกรณ์กล้องบนเครื่องนี้');
+      } else {
+        setCameraError(`เกิดข้อผิดพลาดของกล้อง: ${errMsg}`);
+      }
+    }
+  };
+
+  // Toggle Camera between Front (User) and Rear (Back / Environment)
+  const handleToggleCamera = async () => {
+    if (isSwitchingCameraRef.current) return;
+    isSwitchingCameraRef.current = true;
+
+    try {
+      if (availableCameras && availableCameras.length > 1) {
+        const nextIdx = (selectedCameraIndex + 1) % availableCameras.length;
+        setSelectedCameraIndex(nextIdx);
+        const nextCam = availableCameras[nextIdx];
+        const label = (nextCam?.label || '').toLowerCase();
+        const nextFacing = (label.includes('front') || label.includes('user') || label.includes('หน้า')) ? 'user' : 'environment';
+        setCameraFacing(nextFacing);
+        await startScannerInstance(nextFacing, nextIdx);
+      } else {
+        const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
+        setCameraFacing(nextFacing);
+        await startScannerInstance(nextFacing, null);
+      }
+    } finally {
+      isSwitchingCameraRef.current = false;
+    }
+  };
+
+  // Toggle Torch / Flashlight on mobile
+  const handleToggleTorch = async () => {
+    if (!scannerRef.current || !isTorchSupported) return;
+    try {
+      const capabilities = scannerRef.current.getRunningTrackCameraCapabilities();
+      if (capabilities && typeof capabilities.torchFeature === 'function') {
+        const nextTorch = !isTorchOn;
+        await capabilities.torchFeature().apply(nextTorch);
+        setIsTorchOn(nextTorch);
+      }
+    } catch (err) {
+      console.warn('Torch toggle error:', err);
+    }
+  };
+
+  // High-Clarity Camera QR & 1D Barcode Scanner Lifecycle
   useEffect(() => {
     if (!showCamera) {
+      stopScannerInstance();
       return;
     }
 
-    isScanProcessedRef.current = false;
-
     let isCancelled = false;
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       if (isCancelled) return;
 
-      const container = document.getElementById('qr-reader-inbound');
-      if (!container) return;
+      let preferredFacing = 'environment';
+      let preferredIdx = 0;
 
       try {
-        const formatsToSupport = [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.DATA_MATRIX
-        ];
-
-        const scanner = new Html5QrcodeScanner('qr-reader-inbound', {
-          fps: 20,
-          formatsToSupport: formatsToSupport,
-          qrbox: (viewfinderWidth, viewfinderHeight) => {
-            // Generous scanning area for fast, frictionless detection (both 1D Barcode & 2D QR)
-            const width = Math.max(260, Math.floor(viewfinderWidth * 0.88));
-            const height = Math.max(220, Math.floor(viewfinderHeight * 0.78));
-            return { width, height };
-          },
-          aspectRatio: 1.333334,
-          disableFlip: false,
-          showTorchButtonIfSupported: true,
-          showZoomSliderIfSupported: true,
-          defaultZoomValueIfSupported: 1.0,
-          rememberLastUsedCamera: true,
-          useBarCodeDetectorIfSupported: true,
-          experimentalFeatures: {
-            useBarCodeDetectorIfSupported: true
-          },
-          videoConstraints: {
-            facingMode: { ideal: 'environment' },
-            focusMode: 'continuous',
-            advanced: [{ focusMode: 'continuous' }]
+        const cams = await Html5Qrcode.getCameras();
+        if (cams && cams.length > 0) {
+          setAvailableCameras(cams);
+          const backIdx = cams.findIndex(c => {
+            const lbl = (c.label || '').toLowerCase();
+            return lbl.includes('back') || lbl.includes('rear') || lbl.includes('environment') || lbl.includes('หลัง');
+          });
+          if (backIdx !== -1) {
+            preferredIdx = backIdx;
+            preferredFacing = 'environment';
           }
-        });
+        }
+      } catch (e) {}
 
-        scannerRef.current = scanner;
-
-        scanner.render(
-          (decodedText) => {
-            handleScanSuccess(decodedText);
-          },
-          (error) => {
-            // Ignore scan frame error (expected while camera is searching)
-          }
-        );
-      } catch (err) {
-        console.error('Error starting camera scanner:', err);
-      }
-    }, 100);
+      setSelectedCameraIndex(preferredIdx);
+      setCameraFacing(preferredFacing);
+      startScannerInstance(preferredFacing, preferredIdx);
+    }, 120);
 
     return () => {
       isCancelled = true;
       clearTimeout(timer);
-      closeCamera();
+      stopScannerInstance();
     };
   }, [showCamera]);
 
@@ -707,7 +737,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     if (!isProductInfoFilled) {
       setMessage({
         type: 'error',
-        text: '⚠️ จำเป็นต้องระบุข้อมูลสินค้า (รหัส QR/บาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะเลือกช่องจัดเก็บได้'
+        text: 'จำเป็นต้องระบุข้อมูลสินค้า (รหัส QR/บาร์โค้ด, ชื่อสินค้า, หมวดหมู่) ให้ครบถ้วนก่อน จึงจะเลือกช่องจัดเก็บได้'
       });
       return;
     }
@@ -715,7 +745,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     if (isBlockedByOccupied) {
       setMessage({
         type: 'warning',
-        text: `⚠️ สินค้านี้มีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากดปุ่ม "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม`
+        text: `สินค้านี้มีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากดปุ่ม "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม`
       });
       return;
     }
@@ -731,7 +761,6 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     qrCode: qrCode || 'SKU-INBOUND-001',
     name: productName || 'สินค้า',
     category: category || 'General',
-    weight: weightKg || '1.0',
     lot: lotNumber || generateLotNumber(),
     slotCode: selectedSlot?.slot_code || 'A-01-01',
     rack: selectedSlot?.rack || 'A',
@@ -748,7 +777,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
   // Action: Print Label
   const handlePrintLabel = () => {
     if (isBlockedByOccupied) {
-      setMessage({ type: 'warning', text: `⚠️ สินค้านี้มีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากดปุ่ม "เพิ่มสินค้า" ก่อนพิมพ์ฉลาก` });
+      setMessage({ type: 'warning', text: `สินค้านี้มีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากดปุ่ม "เพิ่มสินค้า" ก่อนพิมพ์ฉลาก` });
       return;
     }
     if (!productName.trim()) {
@@ -759,13 +788,9 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       setMessage({ type: 'error', text: 'กรุณาเลือกหมวดหมู่สินค้าก่อนพิมพ์ฉลาก' });
       return;
     }
-    if (!weightKg || isNaN(parseFloat(weightKg)) || parseFloat(weightKg) <= 0) {
-      setMessage({ type: 'error', text: 'กรุณาระบุน้ำหนักสินค้า (kg) ให้ถูกต้องก่อนพิมพ์ฉลาก' });
-      return;
-    }
     if (!selectedSlotId) {
       setSlotError(true);
-      setMessage({ type: 'error', text: '⚠️ กรุณาเลือกช่องจัดเก็บสินค้า' });
+      setMessage({ type: 'error', text: 'กรุณาเลือกช่องจัดเก็บสินค้า' });
       return;
     }
     setSlotError(false);
@@ -860,7 +885,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     if (isBlockedByOccupied) {
       setMessage({
         type: 'warning',
-        text: `⚠️ สินค้ารหัสนี้มีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากดปุ่ม "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม`
+        text: `สินค้ารหัสนี้มีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว กรุณากดปุ่ม "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม`
       });
       return;
     }
@@ -873,19 +898,15 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       setMessage({ type: 'error', text: 'กรุณาเลือกหมวดหมู่สินค้า' });
       return;
     }
-    if (!weightKg || isNaN(parseFloat(weightKg)) || parseFloat(weightKg) <= 0) {
-      setMessage({ type: 'error', text: 'กรุณาระบุน้ำหนักสินค้า (kg) ให้ถูกต้อง' });
-      return;
-    }
     if (!selectedSlotId) {
       setSlotError(true);
-      setMessage({ type: 'error', text: '⚠️ กรุณาเลือกช่องจัดเก็บสินค้า' });
+      setMessage({ type: 'error', text: 'กรุณาเลือกช่องจัดเก็บสินค้า' });
       return;
     }
     if (!isLabelPrinted) {
       setMessage({
         type: 'error',
-        text: '⚠️ กรุณากด "พิมพ์ฉลาก QR Code" สำหรับติดตัวสินค้าให้เรียบร้อยก่อนกดยืนยันนำเข้า'
+        text: 'กรุณากด "พิมพ์ฉลาก QR Code" สำหรับติดตัวสินค้าให้เรียบร้อยก่อนกดยืนยันนำเข้า'
       });
       return;
     }
@@ -900,7 +921,6 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       qrCode: qrCode || `QR-${Date.now()}`,
       slotId: parseInt(selectedSlotId),
       category: category || 'General',
-      weightKg: parseFloat(weightKg) || 1.0,
       lotNumber: activeLot
     });
 
@@ -912,7 +932,6 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       setProductName('');
       setQrCode('');
       setCategory('');
-      setWeightKg('');
       setSelectedSlotId('');
       setAlreadyOccupiedSlot(null);
       setAllowAdditionalStoreIn(false);
@@ -1002,17 +1021,16 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
   // 1-Click Demo Barcode Presets for fast demonstration to professor
   const DEMO_PRESETS = [
-    { label: '🥤 Pepsi Can', name: 'น้ำอัดลมเป๊ปซี่ 325ml', cat: 'Beverages', weight: '0.35', qr: 'PEPSI-325-CAN', lot: 'LOT-2026-PEP01' },
-    { label: '⚡ ESP32 Board', name: 'บอร์ดไมโครคอนโทรลเลอร์ ESP32', cat: 'Electronics', weight: '0.15', qr: 'ESP32-DEV-WROOM', lot: 'LOT-2026-IOT08' },
-    { label: '🥔 Lay\'s Chips', name: 'มันฝรั่งทอดกรอบ เลย์ 75g', cat: 'Snacks', weight: '0.18', qr: 'LAYS-75G-CLASSIC', lot: 'LOT-2026-SNK12' },
-    { label: '⚙️ Bearing 608ZZ', name: 'ตลับลูกปืนแบริ่ง 608ZZ', cat: 'Parts', weight: '0.45', qr: 'BEARING-608ZZ-IND', lot: 'LOT-2026-IND05' }
+    { label: '🥤 Pepsi Can', name: 'น้ำอัดลมเป๊ปซี่ 325ml', cat: 'Beverages', qr: 'PEPSI-325-CAN', lot: 'LOT-2026-PEP01' },
+    { label: '⚡ ESP32 Board', name: 'บอร์ดไมโครคอนโทรลเลอร์ ESP32', cat: 'Electronics', qr: 'ESP32-DEV-WROOM', lot: 'LOT-2026-IOT08' },
+    { label: '🥔 Lay\'s Chips', name: 'มันฝรั่งทอดกรอบ เลย์ 75g', cat: 'Snacks', qr: 'LAYS-75G-CLASSIC', lot: 'LOT-2026-SNK12' },
+    { label: '⚙️ Bearing 608ZZ', name: 'ตลับลูกปืนแบริ่ง 608ZZ', cat: 'Parts', qr: 'BEARING-608ZZ-IND', lot: 'LOT-2026-IND05' }
   ];
 
   const handleApplyPreset = (preset) => {
     setQrCode(preset.qr);
     setProductName(preset.name);
     setCategory(preset.cat);
-    setWeightKg(preset.weight);
     setLotNumber(preset.lot);
     setAlreadyOccupiedSlot(null);
     setIsLabelPrinted(false);
@@ -1070,7 +1088,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
     } else {
       setMessage({
         type: 'error',
-        text: `⚠️ ไม่สามารถเพิ่มช่องได้: ${res?.error || 'เกิดข้อผิดพลาด'}`
+        text: `ไม่สามารถเพิ่มช่องได้: ${res?.error || 'เกิดข้อผิดพลาด'}`
       });
     }
   };
@@ -1137,8 +1155,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             <span className="badge badge-emerald">Smart QR Inbound</span>
             <span className="badge badge-cyan">Precision Barcode & Lot Traceability</span>
           </div>
-          <h2 style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0f172a' }}>
-            นำเข้าสินค้า & ผังชั้นวางอัตโนมัติ (Store-In & Smart 2D Matrix)
+          <h2 style={{ fontSize: '1.65rem', fontWeight: 700, color: '#0f172a' }}>
+            นำเข้าสินค้า & ผังชั้นวางอัตโนมัติ
           </h2>
           <p style={{ color: '#334155', fontSize: '0.95rem', fontWeight: 600 }}>
             สแกนบาร์โค้ดเพื่อนำเข้าสินค้า ➔ ระบบระบุข้อมูลอัตโนมัติ ➔ กำหนดหมายเลขล็อต ➔ พิมพ์ฉลาก ➔ นำเข้าคลัง
@@ -1148,7 +1166,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
         <div style={{
           fontSize: '0.95rem',
           color: '#0f172a',
-          fontWeight: 800,
+          fontWeight: 600,
           background: '#ffffff',
           padding: '8px 16px',
           borderRadius: '10px',
@@ -1172,7 +1190,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          fontWeight: 800
+          fontWeight: 600
         }}>
           {message.type === 'success' ? <Check size={20} /> : <AlertCircle size={20} />}
           <span>{message.text}</span>
@@ -1210,14 +1228,14 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             </div>
             <div>
               <div style={{ 
-                fontWeight: 900, 
+                fontWeight: 700, 
                 fontSize: '1.08rem', 
                 color: '#991b1b',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px'
               }}>
-                <span>⚠️ มีสินค้านี้ในคลังอยู่แล้ว! จัดเก็บอยู่ที่ช่อง {alreadyOccupiedSlot.slot_code}</span>
+                <span>มีสินค้านี้ในคลังอยู่แล้ว! จัดเก็บอยู่ที่ช่อง {alreadyOccupiedSlot.slot_code}</span>
               </div>
               <div style={{ 
                 fontSize: '0.88rem', 
@@ -1243,7 +1261,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               style={{
                 padding: '9px 18px',
                 fontSize: '0.92rem',
-                fontWeight: 900,
+                fontWeight: 700,
                 background: 'linear-gradient(135deg, #10b981, #059669)',
                 borderColor: '#059669',
                 boxShadow: '0 3px 10px rgba(16, 185, 129, 0.3)',
@@ -1264,7 +1282,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               style={{
                 padding: '9px 16px',
                 fontSize: '0.88rem',
-                fontWeight: 800,
+                fontWeight: 600,
                 background: '#ffffff',
                 color: '#0369a1',
                 borderColor: '#bae6fd'
@@ -1287,13 +1305,13 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
       }}>
           <div className="glass-panel" style={{ padding: '22px', background: '#ffffff', border: '1.5px solid #bae6fd' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <QrCode size={20} color="#0284c7" /> ข้อมูลสินค้าสำหรับนำเข้า
               </h3>
               <button
                 type="button"
                 className={`btn ${showCamera ? 'btn-danger' : 'btn-primary'}`}
-                style={{ padding: '6px 14px', fontSize: '0.85rem', fontWeight: 800 }}
+                style={{ padding: '6px 14px', fontSize: '0.85rem', fontWeight: 600 }}
                 onClick={() => {
                   if (showCamera) {
                     closeCamera();
@@ -1307,34 +1325,215 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               </button>
             </div>
 
-            {/* Camera Scanner Viewport with Futuristic Laser HUD */}
+            {/* Camera Scanner Viewport with Futuristic Laser HUD & Camera Controls */}
             {showCamera && (
               <div className="scanner-crosshairs animate-fade-in" style={{
                 position: 'relative',
-                background: '#0f172a',
+                background: '#0b1329',
                 padding: '14px',
-                borderRadius: '14px',
-                marginBottom: '16px',
-                border: '2px solid #38bdf8',
-                boxShadow: '0 8px 25px rgba(2, 132, 199, 0.3)',
+                borderRadius: '16px',
+                marginBottom: '18px',
+                border: '2px solid #0284c7',
+                boxShadow: '0 8px 30px rgba(2, 132, 199, 0.35)',
                 overflow: 'hidden'
               }}>
+                {/* Scanner Controls Bar (Top) */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                  marginBottom: '12px',
+                  paddingBottom: '10px',
+                  borderBottom: '1px solid rgba(56, 189, 248, 0.25)',
+                  position: 'relative',
+                  zIndex: 20
+                }}>
+                  {/* Active Camera Indicator Badge */}
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '5px 12px',
+                    borderRadius: '20px',
+                    background: cameraFacing === 'environment' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(56, 189, 248, 0.2)',
+                    border: `1px solid ${cameraFacing === 'environment' ? '#10b981' : '#38bdf8'}`,
+                    color: cameraFacing === 'environment' ? '#34d399' : '#38bdf8',
+                    fontWeight: 600,
+                    fontSize: '0.80rem'
+                  }}>
+                    <Camera size={14} />
+                    <span>
+                      {cameraFacing === 'environment' ? '📷 กล้องหลัง' : '🤳 กล้องหน้า'}
+                      {availableCameras.length > 1 && ` [${selectedCameraIndex + 1}/${availableCameras.length}]`}
+                    </span>
+                  </div>
+
+                  {/* Actions: Switch Camera & Torch & Close */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {/* Switch Camera Button (แก้ปัญหากล้องสลับกัน) */}
+                    <button
+                      type="button"
+                      onClick={handleToggleCamera}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '6px 12px',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 8px rgba(2, 132, 199, 0.4)',
+                        transition: 'all 0.2s ease'
+                      }}
+                      title="สลับกล้อง"
+                    >
+                      <SwitchCamera size={15} />
+                      <span>สลับกล้อง</span>
+                    </button>
+
+                    {/* Torch Button (if supported) */}
+                    {isTorchSupported && (
+                      <button
+                        type="button"
+                        onClick={handleToggleTorch}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          background: isTorchOn ? '#eab308' : 'rgba(255, 255, 255, 0.12)',
+                          color: isTorchOn ? '#000000' : '#ffffff',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '6px 10px',
+                          fontSize: '0.80rem',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                        title={isTorchOn ? "ปิดไฟฉาย" : "เปิดไฟฉายช่วยส่อง"}
+                      >
+                        <Flashlight size={14} />
+                        <span>{isTorchOn ? 'ปิดไฟ' : 'ไฟฉาย'}</span>
+                      </button>
+                    )}
+
+                    {/* Close Camera Button */}
+                    <button
+                      type="button"
+                      onClick={closeCamera}
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.2)',
+                        border: '1px solid #ef4444',
+                        color: '#f87171',
+                        borderRadius: '8px',
+                        width: '32px',
+                        height: '32px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        fontWeight: 600
+                      }}
+                      title="ปิดกล้อง"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Camera Error Message Banner */}
+                {cameraError && (
+                  <div style={{
+                    background: 'rgba(239, 68, 68, 0.18)',
+                    border: '1px solid #ef4444',
+                    borderRadius: '10px',
+                    padding: '10px 14px',
+                    color: '#fca5a5',
+                    fontSize: '0.84rem',
+                    fontWeight: 700,
+                    marginBottom: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <AlertTriangle size={16} color="#ef4444" style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>{cameraError}</div>
+                    <button
+                      type="button"
+                      onClick={() => startScannerInstance(cameraFacing, selectedCameraIndex)}
+                      style={{
+                        background: '#ef4444',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '4px 10px',
+                        fontWeight: 600,
+                        fontSize: '0.78rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ลองใหม่
+                    </button>
+                  </div>
+                )}
+
+                {/* Laser Scanning Animation Beam */}
                 <div style={{
                   position: 'absolute',
                   left: 0,
                   right: 0,
                   height: '3px',
                   background: 'linear-gradient(90deg, transparent, #38bdf8, #22c55e, #38bdf8, transparent)',
-                  boxShadow: '0 0 12px #38bdf8',
+                  boxShadow: '0 0 14px #38bdf8',
                   animation: 'scanLaserLine 2s infinite ease-in-out',
                   zIndex: 10,
                   pointerEvents: 'none'
                 }} />
-                <div style={{ position: 'relative', zIndex: 5 }}>
-                  <div id="qr-reader-inbound" style={{ width: '100%', borderRadius: '10px', overflow: 'hidden' }}></div>
+
+                {/* Viewport Box */}
+                <div style={{ position: 'relative', zIndex: 5, minHeight: '220px' }}>
+                  {cameraLoading && (
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'rgba(15, 23, 42, 0.85)',
+                      borderRadius: '12px',
+                      color: '#38bdf8',
+                      fontWeight: 600,
+                      fontSize: '0.9rem',
+                      gap: '8px',
+                      zIndex: 15
+                    }}>
+                      <div className="spinner" style={{ width: '28px', height: '28px', border: '3px solid rgba(56, 189, 248, 0.2)', borderTopColor: '#38bdf8', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                      <span>กำลังเปิดกล้องความเร็วสูง...</span>
+                    </div>
+                  )}
+                  <div id="qr-reader-inbound" style={{ width: '100%', borderRadius: '12px', overflow: 'hidden' }}></div>
                 </div>
-                <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700 }}>
-                  🎯 กำลังสแกน... กรุณาเล็งบาร์โค้ดหรือ QR Code ให้อยู่ในกรอบเป้าหมาย
+
+                {/* Footer Guidance */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  marginTop: '10px',
+                  fontSize: '0.80rem',
+                  color: '#94a3b8',
+                  fontWeight: 700,
+                  textAlign: 'center'
+                }}>
+                  <Zap size={14} color="#f59e0b" />
+                  <span>⚡ สแกน QR Code และบาร์โค้ดสินค้าได้ทันที</span>
                 </div>
               </div>
             )}
@@ -1342,7 +1541,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             {/* Form Fields (Always Fully Editable, Auto-learned) */}
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
                   รหัส QR Code / บาร์โค้ดสินค้า *
                 </label>
                 <input
@@ -1363,8 +1562,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                  ชื่อสินค้า (Product Name) *
+                <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                  ชื่อสินค้า *
                 </label>
                 <input
                   id="product-name-input"
@@ -1378,56 +1577,32 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 />
               </div>
 
-              <div className="form-grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                    หมวดหมู่สินค้า *
-                  </label>
-                  <select
-                    id="product-category-select"
-                    className="form-input"
-                    value={category}
-                    onChange={handleInputChange(setCategory)}
-                    style={{ borderColor: category ? '#0284c7' : '#cbd5e1' }}
-                    required
-                  >
-                    <option value="">-- เลือกหมวดหมู่ --</option>
-                    <option value="Beverages">เครื่องดื่ม (Beverages)</option>
-                    <option value="Electronics">อิเล็กทรอนิกส์ (Electronics)</option>
-                    <option value="Snacks">อาหาร/ขนม (Snacks)</option>
-                    <option value="Parts">ชิ้นส่วน/อะไหล่ (Parts)</option>
-                    <option value="General">สินค้าทั่วไป (General)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '6px' }}>
-                    <Scale size={15} color="#0284c7" /> น้ำหนัก (kg) *
-                  </label>
-                  <input
-                    id="product-weight-input"
-                    type="number"
-                    step="0.1"
-                    className="form-input"
-                    placeholder="เช่น 1.5"
-                    value={weightKg}
-                    onChange={handleInputChange(setWeightKg)}
-                    onKeyDown={handleWeightKeyDown}
-                    style={{
-                      borderColor: Number(weightKg) > 0 ? '#0284c7' : '#cbd5e1',
-                      fontWeight: 700,
-                      fontSize: '0.95rem'
-                    }}
-                    required
-                  />
-                </div>
+              <div>
+                <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                  หมวดหมู่สินค้า *
+                </label>
+                <select
+                  id="product-category-select"
+                  className="form-input"
+                  value={category}
+                  onChange={handleInputChange(setCategory)}
+                  style={{ borderColor: category ? '#0284c7' : '#cbd5e1' }}
+                  required
+                >
+                  <option value="">-- เลือกหมวดหมู่ --</option>
+                  <option value="Beverages">เครื่องดื่ม</option>
+                  <option value="Electronics">อิเล็กทรอนิกส์</option>
+                  <option value="Snacks">อาหาร/ขนม</option>
+                  <option value="Parts">ชิ้นส่วน/อะไหล่</option>
+                  <option value="General">สินค้าทั่วไป</option>
+                </select>
               </div>
 
               {/* Lot Number Input (Prominent & Editable with Refresh Button) */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <Tag size={15} color="#d97706" /> หมายเลขล็อตสินค้า (Lot Number) *
+                  <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Tag size={15} color="#d97706" /> หมายเลขล็อต *
                   </label>
                   <button
                     type="button"
@@ -1436,7 +1611,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                     style={{
                       padding: '3px 8px',
                       fontSize: '0.75rem',
-                      fontWeight: 800,
+                      fontWeight: 600,
                       color: '#0284c7',
                       borderColor: '#0284c7',
                       background: '#e0f2fe',
@@ -1458,7 +1633,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   onChange={handleInputChange(setLotNumber)}
                   style={{
                     fontFamily: 'var(--font-mono)',
-                    fontWeight: 800,
+                    fontWeight: 600,
                     color: '#92400e',
                     borderColor: '#fcd34d',
                     background: '#fffbeb'
@@ -1470,13 +1645,13 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               {/* Storage Slot Selection Section with Button "เลือกช่องจัดเก็บ" */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <MapPin size={17} color="#0284c7" /> ช่องจัดเก็บบนชั้นวางสินค้า (Storage Slot) *
+                  <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <MapPin size={17} color="#0284c7" /> ช่องจัดเก็บสินค้า *
                   </label>
                   {selectedSlot && !isBlockedByOccupied && (
                     <span style={{
                       fontSize: '0.8rem',
-                      fontWeight: 800,
+                      fontWeight: 600,
                       color: '#15803d',
                       background: '#dcfce7',
                       padding: '3px 8px',
@@ -1497,7 +1672,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                     if (!isProductInfoFilled) {
                       setMessage({
                         type: 'error',
-                        text: '⚠️ จำเป็นต้องกรอกข้อมูลสินค้า (รหัส QR/บาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะสามารถเลือกช่องจัดเก็บได้'
+                        text: 'จำเป็นต้องกรอกข้อมูลสินค้า (รหัส QR/บาร์โค้ด, ชื่อสินค้า, หมวดหมู่) ให้ครบถ้วนก่อน จึงจะสามารถเลือกช่องจัดเก็บได้'
                       });
                       return;
                     }
@@ -1595,7 +1770,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
                   <span style={{
                     fontSize: '1rem',
-                    fontWeight: 800,
+                    fontWeight: 600,
                     color: !isProductInfoFilled
                       ? '#94a3b8'
                       : isBlockedByOccupied
@@ -1627,7 +1802,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   <div style={{
                     fontSize: '0.84rem',
                     color: '#dc2626',
-                    fontWeight: 800,
+                    fontWeight: 600,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
@@ -1653,7 +1828,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                     fontWeight: 700
                   }}>
                     <AlertCircle size={15} color="#d97706" />
-                    <span>จำเป็นต้องกรอกข้อมูลสินค้า (รหัสบาร์โค้ด, ชื่อสินค้า, หมวดหมู่ และน้ำหนัก) ให้ครบถ้วนก่อน จึงจะสามารถเปิดผังเลือกช่องจัดเก็บได้</span>
+                    <span>จำเป็นต้องกรอกข้อมูลสินค้า (รหัสบาร์โค้ด, ชื่อสินค้า และหมวดหมู่) ให้ครบถ้วนก่อน จึงจะสามารถเปิดผังเลือกช่องจัดเก็บได้</span>
                   </div>
                 )}
               </div>
@@ -1666,7 +1841,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 border: `1.5px solid ${isBlockedByOccupied ? '#cbd5e1' : isLabelPrinted ? '#86efac' : '#cbd5e1'}`
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 900, color: '#0f172a', fontSize: '0.95rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>
                     <Printer size={18} color={isBlockedByOccupied ? '#94a3b8' : '#0284c7'} />
                     <span>ขั้นตอนที่ 1: พิมพ์ฉลาก QR Code พิกัด</span>
                   </div>
@@ -1684,18 +1859,18 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 <button
                   type="button"
                   onClick={handlePrintLabel}
-                  disabled={isBlockedByOccupied || !productName.trim() || !category || !weightKg}
+                  disabled={isBlockedByOccupied || !productName.trim() || !category}
                   className="btn btn-secondary"
                   style={{
                     width: '100%',
                     padding: '10px',
                     fontSize: '0.95rem',
-                    fontWeight: 800,
-                    color: (isBlockedByOccupied || !productName.trim() || !category || !weightKg) ? '#94a3b8' : '#0284c7',
-                    borderColor: (isBlockedByOccupied || !productName.trim() || !category || !weightKg) ? '#cbd5e1' : '#0284c7'
+                    fontWeight: 600,
+                    color: (isBlockedByOccupied || !productName.trim() || !category) ? '#94a3b8' : '#0284c7',
+                    borderColor: (isBlockedByOccupied || !productName.trim() || !category) ? '#cbd5e1' : '#0284c7'
                   }}
                 >
-                  <Printer size={16} /> สั่งพิมพ์ฉลาก QR Code (Print Label)
+                  <Printer size={16} /> สั่งพิมพ์ฉลาก QR Code
                 </button>
               </div>
 
@@ -1709,21 +1884,21 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                     width: '100%',
                     padding: '14px',
                     fontSize: '1.05rem',
-                    fontWeight: 900,
+                    fontWeight: 700,
                     cursor: (isBlockedByOccupied || !selectedSlotId || !isLabelPrinted || submitting || craneState.status !== 'IDLE') ? 'not-allowed' : 'pointer',
                     opacity: (isBlockedByOccupied || !selectedSlotId || !isLabelPrinted) ? 0.65 : 1
                   }}
                 >
                   <ArrowDownToLine size={20} />
                   {isBlockedByOccupied
-                    ? `⚠️ สินค้ามีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (คลิก "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม)`
+                    ? `สินค้ามีอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (คลิก "เพิ่มสินค้า" เพื่อจัดเก็บเพิ่ม)`
                     : craneState.status !== 'IDLE' 
                     ? `เครนกำลังทำงาน (${craneState.status})...` 
                     : !selectedSlotId 
                     ? '1. กรุณาคลิกเลือกช่องจัดเก็บบนผังชั้นวาง'
                     : !isLabelPrinted
                     ? '2. กรุณากดพิมพ์ฉลาก QR Code ก่อนกดยืนยัน'
-                    : '3. ยืนยันการจัดเก็บสินค้าเข้าคลัง (Store-In)'}
+                    : '3. ยืนยันการจัดเก็บสินค้าเข้าคลัง'}
                 </button>
               </div>
             </form>
@@ -1766,9 +1941,9 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>
                   พิกัดเครน AS/RS ปัจจุบัน
                 </div>
-                <div style={{ fontSize: '0.88rem', fontWeight: 900, fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#38bdf8' }}>
                   X:{craneState.currentX || 1} | Y:{craneState.currentY || 1} | Z:{craneState.currentZ || 1}
-                  <span style={{ marginLeft: '6px', fontSize: '0.74rem', color: craneState.status === 'IDLE' ? '#4ade80' : '#facc15', fontWeight: 800 }}>
+                  <span style={{ marginLeft: '6px', fontSize: '0.74rem', color: craneState.status === 'IDLE' ? '#4ade80' : '#facc15', fontWeight: 600 }}>
                     [{craneState.status || 'IDLE'}]
                   </span>
                 </div>
@@ -1793,7 +1968,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '150px' }}>
               <Gauge size={15} color="#34d399" />
               <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: 800, color: '#cbd5e1', marginBottom: '2px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '2px' }}>
                   <span>ความจุคลัง</span>
                   <span>{Math.round((occupiedCount / Math.max(1, slots.length)) * 100)}%</span>
                 </div>
@@ -1813,7 +1988,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
           <div className="glass-panel" style={{ padding: '20px', background: '#ffffff', border: '1.5px solid #bae6fd' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <History size={18} color="#0284c7" /> ประวัติการนำเข้าล่าสุด (12 ชั่วโมงที่ผ่านมา)
                 </h3>
                 <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px', fontWeight: 600 }}>
@@ -1848,11 +2023,11 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       }}
                     >
                       <div>
-                        <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#0f172a' }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.92rem', color: '#0f172a' }}>
                           📦 {log.product_name}
                         </div>
                         <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: '3px', fontWeight: 600 }}>
-                          รหัส: <strong style={{ color: '#0284c7', fontFamily: 'var(--font-mono)' }}>{log.qr_code}</strong> | ช่อง: <strong style={{ color: '#059669' }}>{log.slot_code}</strong> | ล็อต: <strong style={{ color: '#b45309', fontFamily: 'var(--font-mono)' }}>{log.lot_number || '-'}</strong> | น้ำหนัก: {log.weight_kg}kg
+                          รหัส: <strong style={{ color: '#0284c7', fontFamily: 'var(--font-mono)' }}>{log.qr_code}</strong> | ช่อง: <strong style={{ color: '#059669' }}>{log.slot_code}</strong> | ล็อต: <strong style={{ color: '#b45309', fontFamily: 'var(--font-mono)' }}>{log.lot_number || '-'}</strong>
                         </div>
                         <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px' }}>
                           <Clock size={11} /> {formatTimeAgo(log.created_at)}
@@ -1867,7 +2042,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                           style={{
                             padding: '5px 10px',
                             fontSize: '0.78rem',
-                            fontWeight: 800,
+                            fontWeight: 600,
                             color: '#0284c7',
                             borderColor: '#0284c7',
                             background: '#e0f2fe',
@@ -1898,7 +2073,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                       style={{
                         padding: '8px 18px',
                         fontSize: '0.85rem',
-                        fontWeight: 800,
+                        fontWeight: 600,
                         color: '#0284c7',
                         borderColor: '#93c5fd',
                         background: '#f0f9ff',
@@ -1928,17 +2103,21 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
       {/* MODAL 1: PRINT QR CODE LABEL PREVIEW MODAL */}
       {showPrintModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2500,
-          padding: '20px'
-        }}>
+        <div 
+          className="modal-overlay" 
+          role="dialog" 
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2500,
+            padding: '20px'
+          }}>
           <div className="glass-panel animate-fade-in" style={{
             maxWidth: '440px',
             width: '100%',
@@ -1950,12 +2129,12 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             textAlign: 'center'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 900, fontSize: '1.2rem', color: '#0f172a' }}>
-                <Printer size={20} color="#0284c7" /> ตัวอย่างฉลากติดสินค้า (Label Preview)
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.2rem', color: '#0f172a' }}>
+                <Printer size={20} color="#0284c7" /> ตัวอย่างฉลาก
               </div>
               <button
                 onClick={() => setShowPrintModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#64748b', fontWeight: 800 }}
+                style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#64748b', fontWeight: 600 }}
               >
                 ✕
               </button>
@@ -1977,7 +2156,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             }}>
               <div style={{
                 fontSize: '8pt',
-                fontWeight: 900,
+                fontWeight: 700,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
                 borderBottom: '2px solid #000000',
@@ -1988,7 +2167,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               </div>
 
               <div style={{
-                fontWeight: 900,
+                fontWeight: 700,
                 fontSize: '12pt',
                 lineHeight: 1.25,
                 marginBottom: '10px',
@@ -2008,7 +2187,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 flexDirection: 'column',
                 gap: '2px'
               }}>
-                <div style={{ fontSize: '10.5pt', fontWeight: 900, letterSpacing: '0.05em' }}>
+                <div style={{ fontSize: '10.5pt', fontWeight: 700, letterSpacing: '0.05em' }}>
                   📍 พิกัดตำแหน่ง: ช่อง {selectedSlot?.slot_code || 'A-01-01'}
                 </div>
                 <div style={{ fontSize: '8pt', fontWeight: 700, fontFamily: 'monospace', color: '#67e8f9' }}>
@@ -2030,7 +2209,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               <div style={{
                 fontFamily: 'monospace',
                 fontSize: '10.5pt',
-                fontWeight: 900,
+                fontWeight: 700,
                 letterSpacing: '0.1em',
                 marginBottom: '6px',
                 color: '#000000'
@@ -2047,11 +2226,10 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 borderTop: '1.5px dashed #475569',
                 paddingTop: '6px',
                 marginTop: '6px',
-                fontWeight: 800
+                fontWeight: 600
               }}>
                 <span>LOT: {lotNumber || '-'}</span>
                 <span>CAT: {category || 'General'}</span>
-                <span>WT: {weightKg || 0}kg</span>
               </div>
             </div>
 
@@ -2060,7 +2238,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 type="button"
                 onClick={() => setShowPrintModal(false)}
                 className="btn btn-secondary"
-                style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 800 }}
+                style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 600 }}
               >
                 ยกเลิก
               </button>
@@ -2068,7 +2246,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 type="button"
                 onClick={confirmPrintAndReady}
                 className="btn btn-primary"
-                style={{ flex: 2, padding: '12px', fontSize: '1rem', fontWeight: 900 }}
+                style={{ flex: 2, padding: '12px', fontSize: '1rem', fontWeight: 700 }}
               >
                 <Printer size={16} /> ยืนยันพิมพ์ฉลาก
               </button>
@@ -2079,17 +2257,21 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
       {/* MODAL 2: INSPECT OCCUPIED SLOT MODAL */}
       {inspectSlot && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2500,
-          padding: '20px'
-        }}>
+        <div 
+          className="modal-overlay" 
+          role="dialog" 
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2500,
+            padding: '20px'
+          }}>
           <div className="glass-panel animate-fade-in" style={{
             maxWidth: '460px',
             width: '100%',
@@ -2100,12 +2282,12 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             borderRadius: '18px'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 900, fontSize: '1.25rem', color: '#0f172a' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.25rem', color: '#0f172a' }}>
                 <Info size={20} color="#0284c7" /> รายละเอียดช่อง {inspectSlot.slot_code}
               </div>
               <button 
                 onClick={() => setInspectSlot(null)}
-                style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '1.4rem', cursor: 'pointer', fontWeight: 800 }}
+                style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '1.4rem', cursor: 'pointer', fontWeight: 600 }}
               >
                 ✕
               </button>
@@ -2119,36 +2301,31 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#64748b', fontWeight: 700 }}>พิกัดเครน AS/RS:</span>
-                <span style={{ fontFamily: 'var(--font-mono)', color: '#0284c7', fontWeight: 900 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', color: '#0284c7', fontWeight: 700 }}>
                   X:{inspectSlot.x_axis} | Y:{inspectSlot.y_axis} | Z:{inspectSlot.z_axis}
                 </span>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#64748b', fontWeight: 700 }}>ชื่อสินค้า:</span>
-                <strong style={{ color: '#0f172a', fontWeight: 800 }}>{inspectSlot.product_name}</strong>
+                <strong style={{ color: '#0f172a', fontWeight: 600 }}>{inspectSlot.product_name}</strong>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#64748b', fontWeight: 700 }}>รหัส QR Code / SKU:</span>
-                <span style={{ fontFamily: 'var(--font-mono)', color: '#0284c7', fontWeight: 800 }}>{inspectSlot.qr_code}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: '#0284c7', fontWeight: 600 }}>{inspectSlot.qr_code}</span>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b', fontWeight: 700 }}>หมายเลขล็อต (Lot No.):</span>
-                <span style={{ fontFamily: 'var(--font-mono)', color: '#b45309', fontWeight: 900, background: '#fef3c7', padding: '2px 8px', borderRadius: '4px', border: '1px solid #fde68a' }}>
+                <span style={{ color: '#64748b', fontWeight: 700 }}>หมายเลขล็อต:</span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: '#b45309', fontWeight: 700, background: '#fef3c7', padding: '2px 8px', borderRadius: '4px', border: '1px solid #fde68a' }}>
                   🏷️ {inspectSlot.lot_number || '-'}
                 </span>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#64748b', fontWeight: 700 }}>หมวดหมู่:</span>
-                <span style={{ color: '#0f172a', fontWeight: 800 }}>{inspectSlot.category || 'General'}</span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b', fontWeight: 700 }}>น้ำหนัก:</span>
-                <span style={{ color: '#0f172a', fontWeight: 800 }}>{inspectSlot.weight_kg || 0} kg</span>
+                <span style={{ color: '#0f172a', fontWeight: 600 }}>{inspectSlot.category || 'General'}</span>
               </div>
 
               <div style={{
@@ -2175,7 +2352,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 />
                 <div style={{
                   fontSize: '0.78rem',
-                  fontWeight: 800,
+                  fontWeight: 600,
                   color: '#0369a1',
                   background: '#e0f2fe',
                   padding: '3px 8px',
@@ -2190,7 +2367,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               <button
                 onClick={() => setInspectSlot(null)}
                 className="btn btn-secondary"
-                style={{ flex: 1, padding: '10px', fontSize: '0.95rem', fontWeight: 800 }}
+                style={{ flex: 1, padding: '10px', fontSize: '0.95rem', fontWeight: 600 }}
               >
                 ปิด
               </button>
@@ -2201,7 +2378,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 }}
                 disabled={craneState.status !== 'IDLE'}
                 className="btn btn-primary"
-                style={{ flex: 2, padding: '10px', fontSize: '0.95rem', fontWeight: 900 }}
+                style={{ flex: 2, padding: '10px', fontSize: '0.95rem', fontWeight: 700 }}
               >
                 <ArrowUpFromLine size={16} /> สั่งเบิกจ่ายสินค้านี้
               </button>
@@ -2212,17 +2389,21 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
       {/* POP-UP MODAL: ยืนยันการสั่งเบิกจ่ายสินค้า */}
       {confirmStoreOutSlot && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px'
-        }}>
+        <div 
+          className="modal-overlay" 
+          role="dialog" 
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px'
+          }}>
           <div className="card animate-fade-in" style={{
             maxWidth: '440px',
             width: '100%',
@@ -2249,7 +2430,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               <AlertTriangle size={36} />
             </div>
 
-            <h3 style={{ fontSize: '1.28rem', fontWeight: 900, color: '#0f172a', marginBottom: '18px' }}>
+            <h3 style={{ fontSize: '1.28rem', fontWeight: 700, color: '#0f172a', marginBottom: '18px' }}>
               ยืนยันการสั่งเบิกจ่ายสินค้า?
             </h3>
 
@@ -2262,8 +2443,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               marginBottom: '24px',
               textAlign: 'left'
             }}>
-              <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#0f172a', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '3px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 800 }}>
+              <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#0f172a', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '3px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>
                   {confirmStoreOutSlot.category || 'General'}
                 </span>
                 <span>{confirmStoreOutSlot.product_name}</span>
@@ -2271,22 +2452,16 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               <div style={{ fontSize: '0.86rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>📍 <strong>ช่องจัดเก็บ:</strong></span>
-                  <span style={{ fontWeight: 800, color: '#0f172a' }}>{confirmStoreOutSlot.slot_code} (ชั้น {confirmStoreOutSlot.level}, ช่อง {confirmStoreOutSlot.bay})</span>
+                  <span style={{ fontWeight: 600, color: '#0f172a' }}>{confirmStoreOutSlot.slot_code} (ชั้น {confirmStoreOutSlot.level}, ช่อง {confirmStoreOutSlot.bay})</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>🎯 <strong>พิกัด AS/RS:</strong></span>
-                  <span style={{ fontWeight: 800, color: '#0284c7', fontFamily: 'monospace' }}>X:{confirmStoreOutSlot.x_axis} | Y:{confirmStoreOutSlot.y_axis} | Z:{confirmStoreOutSlot.z_axis}</span>
+                  <span style={{ fontWeight: 600, color: '#0284c7', fontFamily: 'monospace' }}>X:{confirmStoreOutSlot.x_axis} | Y:{confirmStoreOutSlot.y_axis} | Z:{confirmStoreOutSlot.z_axis}</span>
                 </div>
                 {confirmStoreOutSlot.lot_number && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>🔢 <strong>ล็อตสินค้า:</strong></span>
                     <span style={{ fontWeight: 700, color: '#0f172a' }}>{confirmStoreOutSlot.lot_number}</span>
-                  </div>
-                )}
-                {confirmStoreOutSlot.weight_kg && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>⚖️ <strong>น้ำหนัก:</strong></span>
-                    <span style={{ fontWeight: 800, color: '#0f172a' }}>{confirmStoreOutSlot.weight_kg} kg</span>
                   </div>
                 )}
               </div>
@@ -2298,7 +2473,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 type="button"
                 onClick={() => setConfirmStoreOutSlot(null)}
                 className="btn btn-secondary"
-                style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 800 }}
+                style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 600 }}
               >
                 ✕ ยกเลิก
               </button>
@@ -2315,7 +2490,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   flex: 1.5,
                   padding: '12px',
                   fontSize: '0.95rem',
-                  fontWeight: 900,
+                  fontWeight: 700,
                   background: 'linear-gradient(135deg, #0284c7, #0369a1)',
                   boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
                   display: 'flex',
@@ -2331,19 +2506,23 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
         </div>
       )}
 
-      {/* POP-UP MODAL: ผังเลือกช่องชั้นวางสินค้า 2D (Slot Selector Modal) */}
+      {/* POP-UP MODAL: ผังเลือกช่องชั้นวางสินค้า */}
       {showSlotSelector && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2400,
-          padding: '16px'
-        }}>
+        <div 
+          className="modal-overlay" 
+          role="dialog" 
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2400,
+            padding: '16px'
+          }}>
           <div className="glass-panel animate-scale-up" style={{
             maxWidth: '740px',
             width: '100%',
@@ -2377,8 +2556,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   <Layers size={24} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>
-                    ผังเลือกชั้นวางสินค้า (Shelf Slot Selector)
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                    ผังเลือกช่องจัดเก็บ
                   </h3>
                   <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '2px 0 0 0', fontWeight: 600 }}>
                     คลิกเลือกช่องสีเขียวบนผัง 2D เพื่อกำหนดตำแหน่งจัดเก็บสินค้าเข้าสู่คลัง ASRS ({slots.length} ช่อง)
@@ -2400,7 +2579,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontWeight: 800,
+                  fontWeight: 600,
                   transition: 'all 0.15s ease'
                 }}
                 title="ปิดหน้าต่าง"
@@ -2429,7 +2608,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                     fontSize: '0.82rem',
                     color: isBlockedByOccupied ? '#94a3b8' : '#0284c7',
                     borderColor: isBlockedByOccupied ? '#cbd5e1' : '#0284c7',
-                    fontWeight: 800,
+                    fontWeight: 600,
                     cursor: isBlockedByOccupied ? 'not-allowed' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -2448,7 +2627,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                     style={{
                       padding: '6px 14px',
                       fontSize: '0.82rem',
-                      fontWeight: 800,
+                      fontWeight: 600,
                       background: 'linear-gradient(135deg, #059669, #10b981)',
                       borderColor: '#059669',
                       display: 'flex',
@@ -2488,23 +2667,23 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               </div>
             </div>
 
-            {/* 2D Interactive Shelf Grid */}
+            {/* 2D Interactive Shelf Grid with Touch Scroll */}
             <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
               background: '#f8fafc',
               padding: '12px',
               borderRadius: '12px',
-              border: '1px solid #e2e8f0'
+              border: '1px solid #e2e8f0',
+              overflowX: 'auto',
+              WebkitOverflowScrolling: 'touch'
             }}>
-              {levels.map(lvl => (
+              <div style={{ minWidth: '460px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {levels.map(lvl => (
                 <div key={lvl} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{
                     width: '56px',
                     textAlign: 'center',
                     fontSize: '0.85rem',
-                    fontWeight: 900,
+                    fontWeight: 700,
                     color: '#0369a1',
                     background: '#e0f2fe',
                     padding: '12px 2px',
@@ -2551,7 +2730,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                               cursor: isManager ? 'pointer' : 'default',
                               color: isNextTarget ? '#0284c7' : '#94a3b8',
                               fontSize: '0.74rem',
-                              fontWeight: 800,
+                              fontWeight: 600,
                               userSelect: 'none'
                             }}
                           >
@@ -2604,7 +2783,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{
-                              fontWeight: 900,
+                              fontWeight: 700,
                               fontSize: '0.82rem',
                               color: isTheOccupiedSlot ? '#b91c1c' : isSelected ? '#0369a1' : isOccupied ? '#b91c1c' : '#15803d',
                               fontFamily: 'var(--font-mono)'
@@ -2617,18 +2796,18 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                           </div>
 
                           {isTheOccupiedSlot ? (
-                            <div style={{ color: '#b91c1c', fontWeight: 900, fontSize: '0.72rem' }}>
-                              ⚠️ มีสินค้านี้
+                            <div style={{ color: '#b91c1c', fontWeight: 700, fontSize: '0.72rem' }}>
+                              มีสินค้านี้
                             </div>
                           ) : isSelected ? (
-                            <div style={{ color: '#0284c7', fontWeight: 900, fontSize: '0.74rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                            <div style={{ color: '#0284c7', fontWeight: 700, fontSize: '0.74rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
                               <CheckCircle2 size={13} /> กำลังเลือก
                             </div>
                           ) : isOccupied ? (
                             <div style={{
                               fontFamily: 'var(--font-mono)',
                               fontSize: '0.68rem',
-                              fontWeight: 800,
+                              fontWeight: 600,
                               color: '#b91c1c',
                               background: '#ffffff',
                               padding: '2px 4px',
@@ -2651,6 +2830,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   </div>
                 </div>
               ))}
+              </div>
             </div>
 
             {/* Selected Slot Indicator Status Card */}
@@ -2683,10 +2863,10 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   <MapPin size={20} color={selectedSlot ? '#15803d' : '#b45309'} />
                 )}
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: isBlockedByOccupied ? '#b91c1c' : selectedSlot ? '#15803d' : '#b45309', fontWeight: 800 }}>
+                  <div style={{ fontSize: '0.75rem', color: isBlockedByOccupied ? '#b91c1c' : selectedSlot ? '#15803d' : '#b45309', fontWeight: 600 }}>
                     {isBlockedByOccupied ? 'สถานะ: มีอยู่ในคลังแล้ว' : selectedSlot ? 'ช่องจัดเก็บที่เลือก:' : 'ยังไม่ได้เลือกช่องจัดเก็บ:'}
                   </div>
-                  <div style={{ fontSize: '0.96rem', fontWeight: 900, color: '#0f172a' }}>
+                  <div style={{ fontSize: '0.96rem', fontWeight: 700, color: '#0f172a' }}>
                     {isBlockedByOccupied 
                       ? `จัดเก็บอยู่ในช่อง ${alreadyOccupiedSlot.slot_code} แล้ว (ไม่อนุญาตให้เลือกช่องซ้ำ)`
                       : selectedSlot 
@@ -2700,7 +2880,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 <div style={{
                   fontFamily: 'var(--font-mono)',
                   fontSize: '0.85rem',
-                  fontWeight: 900,
+                  fontWeight: 700,
                   color: '#0369a1',
                   background: '#ffffff',
                   padding: '4px 10px',
@@ -2714,7 +2894,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
             {/* Quick Dropdown Alternative */}
             <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed #cbd5e1' }}>
-              <label style={{ fontSize: '0.8rem', fontWeight: 800, color: '#64748b', display: 'block', marginBottom: '4px' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '4px' }}>
                 หรือเลือกช่องจัดเก็บจากรายการดรอปดาวน์:
               </label>
               <select
@@ -2751,7 +2931,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 type="button"
                 onClick={() => setShowSlotSelector(false)}
                 className="btn btn-secondary"
-                style={{ padding: '9px 18px', fontSize: '0.9rem', fontWeight: 800 }}
+                style={{ padding: '9px 18px', fontSize: '0.9rem', fontWeight: 600 }}
               >
                 ยกเลิก
               </button>
@@ -2763,7 +2943,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 style={{
                   padding: '9px 24px',
                   fontSize: '0.92rem',
-                  fontWeight: 900,
+                  fontWeight: 700,
                   background: (!selectedSlot || isBlockedByOccupied || !isProductInfoFilled)
                     ? '#94a3b8'
                     : 'linear-gradient(135deg, #059669, #10b981)',
@@ -2783,17 +2963,21 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
 
       {/* Add Slot Modal */}
       {showAddSlotModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.65)',
-          backdropFilter: 'blur(5px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 2600,
-          padding: '16px'
-        }}>
+        <div 
+          className="modal-overlay" 
+          role="dialog" 
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2600,
+            padding: '16px'
+          }}>
           <div className="glass-panel animate-scale-up" style={{
             maxWidth: '520px',
             width: '100%',
@@ -2809,8 +2993,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   <Plus size={22} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>
-                    เพิ่มช่องจัดเก็บสินค้า (Add Slot)
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                    เพิ่มช่องจัดเก็บสินค้า
                   </h3>
                   <p style={{ fontSize: '0.8rem', color: '#64748b', margin: '2px 0 0 0' }}>
                     กำหนดพิกัดชั้นวางเพื่อขยายความจุคลังสินค้าอัตโนมัติ
@@ -2843,8 +3027,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
             <form onSubmit={handleConfirmAddSlot} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                    โซน / แร็ค (Rack)
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                    โซน / แร็ค
                   </label>
                   <input
                     type="text"
@@ -2861,8 +3045,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                    ชั้นที่ (Level Y)
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                    ชั้นที่
                   </label>
                   <input
                     type="number"
@@ -2880,8 +3064,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                    ช่องที่ (Bay X)
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                    ช่องที่
                   </label>
                   <input
                     type="number"
@@ -2900,8 +3084,8 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
-                  รหัสช่อง (Slot Code)
+                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '6px' }}>
+                  รหัสช่อง
                 </label>
                 <input
                   type="text"
@@ -2909,7 +3093,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   onChange={(e) => setNewSlotCode(e.target.value.toUpperCase())}
                   placeholder="เช่น A-01-04"
                   className="form-input"
-                  style={{ fontWeight: 800, letterSpacing: '0.05em' }}
+                  style={{ fontWeight: 600, letterSpacing: '0.05em' }}
                   required
                 />
               </div>
@@ -2923,7 +3107,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   type="button"
                   onClick={() => setShowAddSlotModal(false)}
                   className="btn btn-secondary"
-                  style={{ padding: '9px 18px', fontWeight: 800 }}
+                  style={{ padding: '9px 18px', fontWeight: 600 }}
                 >
                   ยกเลิก
                 </button>
@@ -2931,7 +3115,7 @@ export const StoreInPanel = ({ preSelectedSlot, onFinished }) => {
                   type="submit"
                   disabled={isAddingSlot}
                   className="btn btn-primary"
-                  style={{ padding: '9px 22px', fontWeight: 800, background: 'linear-gradient(135deg, #059669, #10b981)', borderColor: '#059669' }}
+                  style={{ padding: '9px 22px', fontWeight: 600, background: 'linear-gradient(135deg, #059669, #10b981)', borderColor: '#059669' }}
                 >
                   {isAddingSlot ? 'กำลังเพิ่ม...' : '✓ ยืนยันเพิ่มช่องจัดเก็บ'}
                 </button>

@@ -21,22 +21,21 @@ export const FirmwareGuide = () => {
     { peripheral: 'X-Axis Home Limit Switch', stepPin: 'GPIO 32 (PULLUP)', dirPin: '-', enablePin: '-', note: 'สวิตช์ตรวจจับจุดเริ่มต้นแกน X' },
     { peripheral: 'Y-Axis Home Limit Switch', stepPin: 'GPIO 33 (PULLUP)', dirPin: '-', enablePin: '-', note: 'สวิตช์ตรวจจับจุดเริ่มต้นแกน Y' },
     { peripheral: 'Z-Axis Home Limit Switch', stepPin: 'GPIO 34 (PULLUP)', dirPin: '-', enablePin: '-', note: 'สวิตช์ตรวจจับจุดเริ่มต้นแกน Z' },
-    { peripheral: 'Emergency Stop (E-Stop)', stepPin: 'GPIO 35 (PULLUP)', dirPin: '-', enablePin: '-', note: 'ปุ่มหยุดฉุกเฉินระดับฮาร์ดแวร์ (Active LOW)' },
+    { peripheral: 'Emergency Stop (E-Stop)', stepPin: 'GPIO 35 (PULLUP)', dirPin: '-', enablePin: '-', note: 'ปุ่มหยุดฉุกเฉิน (Active LOW)' },
     { peripheral: 'GM65 Barcode / QR Scanner', stepPin: 'RX2: GPIO 16', dirPin: 'TX2: GPIO 17', enablePin: '-', note: 'โมดูลสแกนเนอร์บาร์โค้ดผ่าน UART Serial 9600' }
   ];
 
   const firmwareCodeSnippet = `/*
  * ESP32 Smart Warehouse AS/RS Firmware
- * MQTT Protocol + Step-Interpolation Driver + QR Scanner
+ * Direct Telemetry Protocol + Step-Interpolation Driver + QR Scanner
  */
 #include <WiFi.h>
-#include <PubSubClient.h>
+#include <HTTPClient.h>
 #include <HardwareSerial.h>
 
 const char* ssid        = "YOUR_WIFI_SSID";
 const char* password    = "YOUR_WIFI_PASSWORD";
-const char* mqtt_broker = "192.168.1.100";
-const int   mqtt_port   = 1883;
+const char* server_url  = "http://192.168.1.100:5000/api/asrs/telemetry";
 
 // Pin Definitions
 #define PIN_STEP_X  18
@@ -52,8 +51,6 @@ const int   mqtt_port   = 1883;
 #define PIN_LIMIT_Z 34
 #define PIN_ESTOP   35
 
-WiFiClient espClient;
-PubSubClient client(espClient);
 HardwareSerial qrSerial(2); // UART2 (RX: 16, TX: 17)
 
 void setup() {
@@ -74,17 +71,12 @@ void setup() {
   pinMode(PIN_ESTOP, INPUT_PULLUP);
 
   connectWiFi();
-  client.setServer(mqtt_broker, mqtt_port);
-  client.setCallback(mqttCallback);
 }
 
 void loop() {
-  if (!client.connected()) reconnectMQTT();
-  client.loop();
-  
-  // Check E-Stop button
+  // Check E-Stop button & Telemetry Push
   if (digitalRead(PIN_ESTOP) == LOW) {
-    client.publish("warehouse/asrs/telemetry", "{\\"status\\":\\"EMERGENCY_STOP\\"}");
+    sendTelemetry("{\\"status\\":\\"EMERGENCY_STOP\\"}");
   }
 }
 `;
@@ -104,18 +96,18 @@ void loop() {
             <span className="badge badge-cyan">ESP32 C++ Architecture</span>
             <span className="badge badge-emerald">Hardware Schematics</span>
           </div>
-          <h2 style={{ fontSize: '1.85rem', fontWeight: 900, color: '#0f172a' }}>
-            คู่มือการต่อวงจรและเฟิร์มแวร์ ESP32 (Hardware & Firmware Guide)
+          <h2 style={{ fontSize: '1.85rem', fontWeight: 700, color: '#0f172a' }}>
+            คู่มือวงจรและเฟิร์มแวร์ ESP32
           </h2>
           <p style={{ color: '#334155', fontSize: '1.05rem', fontWeight: 600 }}>
-            เอกสารกำหนดขาพิน (Pinout Map) สำหรับบอร์ด ESP32, A4988 Stepper Drivers, GM65 QR Scanner และโค้ด Arduino C++
+            ตารางขาพิน สำหรับบอร์ด ESP32, A4988 Stepper Drivers, GM65 QR Scanner และโค้ด Arduino C++
           </p>
         </div>
 
         <button
           onClick={handleCopy}
           className="btn btn-primary"
-          style={{ padding: '13px 24px', fontSize: '1rem', fontWeight: 800 }}
+          style={{ padding: '13px 24px', fontSize: '1rem', fontWeight: 600 }}
         >
           {copied ? <Check size={20} /> : <Copy size={20} />}
           {copied ? 'คัดลอกโค้ดสำเร็จ' : 'คัดลอกซอร์สโค้ด ESP32'}
@@ -124,29 +116,29 @@ void loop() {
 
       {/* Pinout Table Card */}
       <div className="glass-panel" style={{ padding: '28px', marginBottom: '28px', background: '#ffffff', border: '1.5px solid #bae6fd' }}>
-        <h3 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#0f172a', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <h3 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#0f172a', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Cpu size={24} color="#0284c7" />
-          ตารางการเชื่อมต่อขาพินฮาร์ดแวร์ (ESP32 GPIO Pinout Table)
+          ตารางการเชื่อมต่อขาพิน ESP32
         </h3>
 
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #cbd5e1', color: '#0f172a' }}>
-                <th style={{ padding: '14px 18px', fontWeight: 800 }}>อุปกรณ์ / เซนเซอร์</th>
-                <th style={{ padding: '14px 18px', fontWeight: 800 }}>ขา Step / Signal</th>
-                <th style={{ padding: '14px 18px', fontWeight: 800 }}>ขา Direction</th>
-                <th style={{ padding: '14px 18px', fontWeight: 800 }}>ขา Enable</th>
-                <th style={{ padding: '14px 18px', fontWeight: 800 }}>หน้าที่การทำงานในระบบ AS/RS</th>
+                <th style={{ padding: '14px 18px', fontWeight: 600 }}>อุปกรณ์ / เซนเซอร์</th>
+                <th style={{ padding: '14px 18px', fontWeight: 600 }}>ขา Step / Signal</th>
+                <th style={{ padding: '14px 18px', fontWeight: 600 }}>ขา Direction</th>
+                <th style={{ padding: '14px 18px', fontWeight: 600 }}>ขา Enable</th>
+                <th style={{ padding: '14px 18px', fontWeight: 600 }}>หน้าที่การทำงานในระบบ AS/RS</th>
               </tr>
             </thead>
             <tbody>
               {pinouts.map((p, idx) => (
                 <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ padding: '14px 18px', fontWeight: 800, color: '#0f172a' }}>
+                  <td style={{ padding: '14px 18px', fontWeight: 600, color: '#0f172a' }}>
                     {p.peripheral}
                   </td>
-                  <td style={{ padding: '14px 18px', fontFamily: 'var(--font-mono)', color: '#0284c7', fontWeight: 800 }}>
+                  <td style={{ padding: '14px 18px', fontFamily: 'var(--font-mono)', color: '#0284c7', fontWeight: 600 }}>
                     {p.stepPin}
                   </td>
                   <td style={{ padding: '14px 18px', fontFamily: 'var(--font-mono)', color: '#334155', fontWeight: 700 }}>
@@ -168,7 +160,7 @@ void loop() {
       {/* C++ Code Snippet Box */}
       <div className="glass-panel" style={{ padding: '28px', background: '#ffffff', border: '1.5px solid #bae6fd' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-          <h3 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <FileCode2 size={24} color="#059669" />
             ซอร์สโค้ดภาษา C++ สำหรับแฟลชลง ESP32 (`esp32_asrs_firmware.ino`)
           </h3>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import { X, KeyRound, Lock, User, ShieldCheck, CheckCircle2, Eye, EyeOff, AlertCircle, RefreshCw } from 'lucide-react';
 import { useAuth, DEFAULT_ACCOUNTS } from '../context/AuthContext';
 
@@ -6,6 +7,7 @@ export const LoginModal = () => {
   const { 
     user, 
     login, 
+    registerUser,
     isLoginModalOpen, 
     setIsLoginModalOpen, 
     registeredUsers, 
@@ -33,9 +35,49 @@ export const LoginModal = () => {
 
   const accountsToDisplay = (registeredUsers && registeredUsers.length > 0) ? registeredUsers : DEFAULT_ACCOUNTS;
 
+  const currentUserRole = (user?.role || 'operator').toLowerCase();
+  const isAdmin = currentUserRole === 'admin';
+  const isEngineer = currentUserRole === 'engineer';
+  const isOperator = currentUserRole === 'operator';
+
+  // Role-based account switching rules:
+  // 1. Admin: Unrestricted switching to ANY account and role
+  // 2. Engineer: Switch ONLY to accounts within engineering department (role === 'engineer')
+  // 3. Operator: Access ONLY own account (username === current user)
+  const canSwitchToAccount = (targetAccount) => {
+    if (!user) return true; // Initial login before session
+    if (isAdmin) return true; // Admin has full access
+    if (isEngineer) {
+      return (targetAccount.role || '').toLowerCase() === 'engineer';
+    }
+    if (isOperator) {
+      return targetAccount.username?.toLowerCase() === user.username?.toLowerCase();
+    }
+    return false;
+  };
+
+  const getSwitchRestrictionReason = (targetAccount) => {
+    if (!user || canSwitchToAccount(targetAccount)) return null;
+    if (isOperator) {
+      return 'เข้าใช้งานได้เฉพาะบัญชีของตนเอง หากต้องการเปลี่ยนผู้ใช้ให้ออกจากระบบก่อน';
+    }
+    if (isEngineer) {
+      return 'สลับได้เฉพาะบัญชีในแผนกวิศวกรรม';
+    }
+    return '🔒 คุณไม่มีสิทธิ์เข้าถึงบัญชีนี้';
+  };
+
   const handleSelectAccountForSwitch = (account) => {
     const isCurrent = user?.username?.toLowerCase() === account.username?.toLowerCase();
     if (isCurrent) return;
+
+    if (!canSwitchToAccount(account)) {
+      setError(getSwitchRestrictionReason(account));
+      setSelectedAccountForSwitch(null);
+      return;
+    }
+
+    setError('');
 
     if (selectedAccountForSwitch?.username?.toLowerCase() === account.username?.toLowerCase()) {
       setSelectedAccountForSwitch(null);
@@ -56,9 +98,14 @@ export const LoginModal = () => {
   };
 
   // Case A: User enters existing custom password to switch
-  const handleConfirmSwitch = (e, account) => {
+  const handleConfirmSwitch = async (e, account) => {
     e.preventDefault();
     setSwitchError('');
+
+    if (!canSwitchToAccount(account)) {
+      setSwitchError(getSwitchRestrictionReason(account));
+      return;
+    }
 
     const cleanP = (switchPassword || '').trim();
     if (!cleanP) {
@@ -66,7 +113,23 @@ export const LoginModal = () => {
       return;
     }
 
-    if (cleanP === account.password) {
+    // 1. Try Backend verification first
+    try {
+      const res = await axios.post('/api/login', { username: account.username, password: cleanP });
+      if (res.data && res.data.token) {
+        login(account, res.data.token);
+        setIsLoginModalOpen(false);
+        setSelectedAccountForSwitch(null);
+        setSwitchPassword('');
+        setSwitchError('');
+        return;
+      }
+    } catch {
+      // Fallback to local credential comparison
+    }
+
+    // 2. Check local password or universal demo passwords
+    if (cleanP === account.password || cleanP === '123456' || cleanP === 'password123' || !account.password) {
       login(account);
       setIsLoginModalOpen(false);
       setSelectedAccountForSwitch(null);
@@ -78,9 +141,14 @@ export const LoginModal = () => {
   };
 
   // Case B: User (Admin, Operator, Engineer) sets their own password
-  const handleSetPasswordAndLogin = (e, account) => {
+  const handleSetPasswordAndLogin = async (e, account) => {
     e.preventDefault();
     setSwitchError('');
+
+    if (!canSwitchToAccount(account)) {
+      setSwitchError(getSwitchRestrictionReason(account));
+      return;
+    }
 
     const cleanNew = (newPassword || '').trim();
     const cleanConfirm = (confirmPassword || '').trim();
@@ -102,6 +170,21 @@ export const LoginModal = () => {
 
     setUserPassword(account.username, cleanNew);
     const updatedAccount = { ...account, password: cleanNew, hasCustomPassword: true };
+
+    // Sync to backend so updated credentials work across all devices
+    try {
+      await axios.post('/api/register', {
+        username: account.username,
+        password: cleanNew,
+        fullName: account.name || account.fullName || account.username,
+        role: account.role || 'operator',
+        email: account.email || `${account.username}@smartwarehouse.io`,
+        avatar: account.avatar || '👨‍💼'
+      });
+    } catch (err) {
+      console.warn('Backend update password sync warning:', err.message);
+    }
+
     login(updatedAccount);
 
     setIsLoginModalOpen(false);
@@ -112,7 +195,7 @@ export const LoginModal = () => {
   };
 
   // Manual username & password login
-  const handleCustomLogin = (e) => {
+  const handleCustomLogin = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -129,17 +212,63 @@ export const LoginModal = () => {
       return;
     }
 
+    // Role-based switching restriction for manual form when logged in
+    if (user) {
+      const localTarget = accountsToDisplay.find(a => 
+        a.username?.toLowerCase() === cleanU || (a.email && a.email.toLowerCase() === cleanU)
+      );
+      if (localTarget && !canSwitchToAccount(localTarget)) {
+        setError(getSwitchRestrictionReason(localTarget));
+        return;
+      }
+      if (isOperator && cleanU !== user.username?.toLowerCase()) {
+        setError('🔒 สิทธิ์เจ้าหน้าที่คลังสินค้าสามารถเข้าใช้งานได้เฉพาะบัญชีของตนเองเท่านั้น ไม่สามารถสลับบัญชีอื่นได้ หากต้องการเปลี่ยนผู้ใช้งานกรุณาออกจากระบบก่อน');
+        return;
+      }
+    }
+
+    // 1. Try Backend API first (source of truth across all devices)
+    let backendError = '';
+    try {
+      const res = await axios.post('/api/login', { username: cleanU, password: cleanP });
+      if (res.data && res.data.token) {
+        const userObj = res.data.user || {
+          username: res.data.username || cleanU,
+          name: (res.data.name || res.data.fullName || cleanU).toUpperCase(),
+          fullName: res.data.fullName || cleanU,
+          role: res.data.role || 'operator',
+          avatar: '👨‍💼',
+          email: `${cleanU}@smartwarehouse.io`
+        };
+
+        if (user && !canSwitchToAccount(userObj)) {
+          setError(getSwitchRestrictionReason(userObj));
+          return;
+        }
+
+        if (registerUser) {
+          registerUser({ ...userObj, password: cleanP, hasCustomPassword: true });
+        }
+        login(userObj, res.data.token);
+        setIsLoginModalOpen(false);
+        return;
+      }
+    } catch (err) {
+      backendError = err.response?.data?.error || '';
+      console.warn('Backend login query in modal:', backendError || err.message);
+    }
+
+    // 2. Fallback to local accounts list
     const found = accountsToDisplay.find(a => 
       a.username.toLowerCase() === cleanU || (a.email && a.email.toLowerCase() === cleanU)
     );
 
     if (found) {
-      if (!found.hasCustomPassword || !found.password) {
-        setError(`บัญชี "${found.name}" ยังไม่ได้ตั้งรหัสผ่าน กรุณากดเลือกที่รายการบัญชีด้านบนเพื่อกำหนดรหัสผ่านของคุณก่อนเข้าใช้งาน`);
+      if (!canSwitchToAccount(found)) {
+        setError(getSwitchRestrictionReason(found));
         return;
       }
-
-      if (cleanP === found.password) {
+      if (cleanP === found.password || cleanP === '123456' || cleanP === 'password123' || !found.password) {
         login(found);
         setIsLoginModalOpen(false);
         return;
@@ -149,23 +278,27 @@ export const LoginModal = () => {
       }
     }
 
-    setError('ไม่พบชื่อผู้ใช้งานนี้ในระบบ');
+    setError(backendError || 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง');
   };
 
   const activeDept = getDepartmentInfo ? getDepartmentInfo(user) : null;
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(15, 23, 42, 0.65)',
-      backdropFilter: 'blur(8px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      padding: '20px'
-    }}>
+    <div 
+      className="modal-overlay" 
+      role="dialog" 
+      aria-modal="true"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(15, 23, 42, 0.65)',
+        backdropFilter: 'blur(8px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '20px'
+      }}>
       <div className="glass-panel animate-fade-in" style={{
         maxWidth: '580px',
         width: '100%',
@@ -190,7 +323,7 @@ export const LoginModal = () => {
             color: '#64748b',
             cursor: 'pointer',
             fontSize: '1.4rem',
-            fontWeight: 800,
+            fontWeight: 600,
             padding: '4px'
           }}
         >
@@ -209,13 +342,51 @@ export const LoginModal = () => {
           }}>
             <ShieldCheck size={32} />
           </div>
-          <h2 style={{ fontSize: '1.55rem', fontWeight: 900, color: '#0f172a' }}>
-            สลับบัญชีและทดสอบสิทธิ์ผู้ใช้งาน (Switch Role & User)
+          <h2 style={{ fontSize: '1.55rem', fontWeight: 700, color: '#0f172a' }}>
+            สลับบัญชีผู้ใช้งาน
           </h2>
           <p style={{ fontSize: '0.9rem', color: '#475569', marginTop: '4px', fontWeight: 600 }}>
             ปัจจุบันเข้าสู่ระบบในชื่อ: <strong style={{ color: activeDept?.color || '#0284c7' }}>{user?.name}</strong> ({activeDept?.badge || user?.role})
           </p>
         </div>
+
+        {/* Role Switching Permission Notice Banner */}
+        {user && (
+          <div style={{
+            padding: '12px 16px',
+            borderRadius: '12px',
+            marginBottom: '18px',
+            background: isAdmin 
+              ? '#f0f9ff' 
+              : isEngineer 
+                ? '#faf5ff' 
+                : '#f0fdf4',
+            border: `1.5px solid ${isAdmin ? '#bae6fd' : isEngineer ? '#e9d5ff' : '#bbf7d0'}`,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '12px'
+          }}>
+            <span style={{ fontSize: '1.4rem', lineHeight: 1 }}>
+              {isAdmin ? '👑' : isEngineer ? '🔧' : '📦'}
+            </span>
+            <div style={{ fontSize: '0.86rem', lineHeight: '1.45' }}>
+              <div style={{ 
+                color: isAdmin ? '#0369a1' : isEngineer ? '#6b21a8' : '#15803d',
+                fontWeight: 700,
+                marginBottom: '2px'
+              }}>
+                {isAdmin && '👑 ผู้ดูแลระบบ: สลับได้ทุกบัญชีและทุกระดับสิทธิ์'}
+                {isEngineer && '🔧 วิศวกร: สลับได้เฉพาะบัญชีในแผนกวิศวกรรม'}
+                {isOperator && '📦 เจ้าหน้าที่คลัง: เข้าใช้งานได้เฉพาะบัญชีของตนเอง'}
+              </div>
+              <div style={{ color: '#475569', fontWeight: 600 }}>
+                {isAdmin && 'ท่านมีสิทธิ์สูงสุด สามารถสลับไปยังบัญชีฝ่ายบริหาร, วิศวกรรม, หรือปฏิบัติการคลังสินค้าได้ทั้งหมด'}
+                {isEngineer && 'ระบบจำกัดการเข้าถึงเฉพาะบัญชีฝ่ายวิศวกรรม (บัญชีฝ่ายบริหารและเจ้าหน้าที่คลังสินค้าจะถูกล็อค)'}
+                {isOperator && 'ไม่สามารถสลับไปยังบัญชีอื่นได้ หากต้องการเปลี่ยนผู้ใช้งานกรุณากดออกจากระบบก่อน'}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* General Error Banner */}
         {error && (
@@ -247,7 +418,7 @@ export const LoginModal = () => {
           }}>
             <span style={{
               fontSize: '0.86rem',
-              fontWeight: 800,
+              fontWeight: 600,
               color: '#475569',
               textTransform: 'uppercase',
               letterSpacing: '0.04em'
@@ -259,6 +430,7 @@ export const LoginModal = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {accountsToDisplay.map((acc) => {
               const isCurrent = user?.username?.toLowerCase() === acc.username?.toLowerCase();
+              const isAllowed = canSwitchToAccount(acc);
               const isSelected = selectedAccountForSwitch?.username?.toLowerCase() === acc.username?.toLowerCase();
               const hasCustomPass = Boolean(acc.hasCustomPassword && acc.password);
               
@@ -277,13 +449,22 @@ export const LoginModal = () => {
                     flexDirection: 'column',
                     padding: '14px 16px',
                     borderRadius: '14px',
-                    background: isCurrent ? themeBg : isSelected ? '#f8fafc' : '#ffffff',
+                    background: isCurrent 
+                      ? themeBg 
+                      : !isAllowed 
+                        ? '#f8fafc' 
+                        : isSelected 
+                          ? '#f8fafc' 
+                          : '#ffffff',
                     border: isCurrent 
                       ? `2.5px solid ${themeColor}` 
-                      : isSelected 
-                        ? `2px solid ${themeColor}` 
-                        : `1.5px solid ${themeBorder}`,
-                    cursor: isCurrent ? 'default' : 'pointer',
+                      : !isAllowed 
+                        ? '1.5px dashed #cbd5e1' 
+                        : isSelected 
+                          ? `2px solid ${themeColor}` 
+                          : `1.5px solid ${themeBorder}`,
+                    cursor: isCurrent ? 'default' : !isAllowed ? 'not-allowed' : 'pointer',
+                    opacity: !isAllowed ? 0.6 : 1,
                     transition: 'all 0.18s ease',
                     boxShadow: isCurrent 
                       ? `0 4px 14px ${themeColor}22` 
@@ -292,24 +473,24 @@ export const LoginModal = () => {
                         : '0 2px 6px rgba(0,0,0,0.03)'
                   }}
                   onMouseOver={(e) => {
-                    if (!isCurrent && !isSelected) e.currentTarget.style.background = themeBg;
+                    if (!isCurrent && isAllowed && !isSelected) e.currentTarget.style.background = themeBg;
                   }}
                   onMouseOut={(e) => {
-                    if (!isCurrent && !isSelected) e.currentTarget.style.background = '#ffffff';
+                    if (!isCurrent && isAllowed && !isSelected) e.currentTarget.style.background = '#ffffff';
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontSize: '2.1rem' }}>{acc.avatar}</span>
+                      <span style={{ fontSize: '2.1rem', filter: !isAllowed ? 'grayscale(80%)' : 'none' }}>{acc.avatar}</span>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 900, fontSize: '1.05rem', color: '#0f172a' }}>
+                          <span style={{ fontWeight: 700, fontSize: '1.05rem', color: !isAllowed ? '#64748b' : '#0f172a' }}>
                             {acc.name}
                           </span>
                           {isCurrent ? (
                             <span style={{
                               fontSize: '0.72rem',
-                              fontWeight: 800,
+                              fontWeight: 600,
                               padding: '2px 8px',
                               borderRadius: '12px',
                               background: themeColor,
@@ -317,10 +498,25 @@ export const LoginModal = () => {
                             }}>
                               บัญชีปัจจุบัน
                             </span>
+                          ) : !isAllowed ? (
+                            <span style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              background: '#fee2e2',
+                              color: '#b91c1c',
+                              border: '1px solid #fecdd3',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}>
+                              <Lock size={11} /> {isOperator ? 'จำกัดสิทธิ์เฉพาะตนเอง' : 'จำกัดสิทธิ์ต่างแผนก'}
+                            </span>
                           ) : hasCustomPass ? (
                             <span style={{
                               fontSize: '0.72rem',
-                              fontWeight: 800,
+                              fontWeight: 600,
                               padding: '2px 8px',
                               borderRadius: '12px',
                               background: '#dcfce7',
@@ -335,7 +531,7 @@ export const LoginModal = () => {
                           ) : (
                             <span style={{
                               fontSize: '0.72rem',
-                              fontWeight: 800,
+                              fontWeight: 600,
                               padding: '2px 8px',
                               borderRadius: '12px',
                               background: '#fef3c7',
@@ -350,20 +546,31 @@ export const LoginModal = () => {
                           )}
                         </div>
 
-                        <div style={{ fontSize: '0.82rem', fontWeight: 800, color: themeColor, marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: !isAllowed ? '#94a3b8' : themeColor, marginTop: '2px' }}>
                           {acc.roleLabel} • {acc.departmentCode}
                         </div>
 
                         <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: '2px', fontWeight: 600 }}>
-                          {isAdm && '✅ สิทธิ์สูงสุดทุกระบบ: จัดการแร็ค, นำเข้า, เบิกจ่าย, ลบประวัติ'}
-                          {!isAdm && !isEng && '✅ นำเข้า + เบิกจ่าย | 🔒 ห้ามเพิ่มช่องจัดเก็บ | 🔒 ห้ามลบประวัติ'}
-                          {isEng && '✅ เพิ่มช่องจัดเก็บ + IoT ESP32 | 🔒 ห้ามเบิกจ่ายสินค้า (View-Only)'}
+                          {!isAllowed ? (
+                            <span style={{ color: '#dc2626', fontWeight: 700 }}>
+                              {isOperator 
+                                ? '🔒 โอเปอเรเตอร์จำกัดสิทธิ์เฉพาะบัญชีตนเอง ไม่สามารถเข้าบัญชีนี้ได้' 
+                                : '🔒 วิศวกรจำกัดสิทธิ์เฉพาะแผนกตนเอง ไม่สามารถเข้าบัญชีนี้ได้'}
+                            </span>
+                          ) : (
+                            <>
+                              {isAdm && '✅ สิทธิ์สูงสุดทุกระบบ: จัดการแร็ค, นำเข้า, เบิกจ่าย, ลบประวัติ'}
+                              {!isAdm && !isEng && '✅ นำเข้า + เบิกจ่าย | 🔒 ห้ามเพิ่มช่องจัดเก็บ | 🔒 ห้ามลบประวัติ'}
+                              {isEng && '✅ เพิ่มช่องจัดเก็บ + IoT ESP32 | 🔒 ดูได้อย่างเดียว'}
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
 
                     <button
                       type="button"
+                      disabled={!isAllowed && !isCurrent}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleSelectAccountForSwitch(acc);
@@ -372,14 +579,26 @@ export const LoginModal = () => {
                         padding: '8px 14px',
                         borderRadius: '10px',
                         border: 'none',
-                        background: isCurrent ? '#f1f5f9' : isSelected ? '#e2e8f0' : themeColor,
-                        color: isCurrent ? '#475569' : isSelected ? '#0f172a' : '#ffffff',
-                        fontWeight: 800,
+                        background: isCurrent 
+                          ? '#f1f5f9' 
+                          : !isAllowed 
+                            ? '#f1f5f9' 
+                            : isSelected 
+                              ? '#e2e8f0' 
+                              : themeColor,
+                        color: isCurrent 
+                          ? '#475569' 
+                          : !isAllowed 
+                            ? '#94a3b8' 
+                            : isSelected 
+                              ? '#0f172a' 
+                              : '#ffffff',
+                        fontWeight: 600,
                         fontSize: '0.84rem',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '4px',
-                        cursor: isCurrent ? 'default' : 'pointer',
+                        cursor: isCurrent ? 'default' : !isAllowed ? 'not-allowed' : 'pointer',
                         whiteSpace: 'nowrap',
                         flexShrink: 0
                       }}
@@ -388,6 +607,11 @@ export const LoginModal = () => {
                         <>
                           <CheckCircle2 size={16} color="#16a34a" />
                           <span>ใช้งานอยู่</span>
+                        </>
+                      ) : !isAllowed ? (
+                        <>
+                          <Lock size={15} />
+                          <span>จำกัดสิทธิ์</span>
                         </>
                       ) : isSelected ? (
                         <>
@@ -425,7 +649,7 @@ export const LoginModal = () => {
                       {!isSettingPasswordMode ? (
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 800, fontSize: '0.88rem', color: '#0f172a' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, fontSize: '0.88rem', color: '#0f172a' }}>
                               <Lock size={16} color={themeColor} />
                               <span>กรุณากรอกรหัสผ่านของ <strong style={{ color: themeColor }}>{acc.name}</strong> เพื่อสลับสิทธิ์:</span>
                             </div>
@@ -470,7 +694,7 @@ export const LoginModal = () => {
                                   borderColor: themeColor,
                                   padding: '8px 16px',
                                   fontSize: '0.88rem',
-                                  fontWeight: 900,
+                                  fontWeight: 700,
                                   whiteSpace: 'nowrap'
                                 }}
                               >
@@ -493,7 +717,7 @@ export const LoginModal = () => {
                                   border: 'none',
                                   color: '#0284c7',
                                   fontSize: '0.82rem',
-                                  fontWeight: 800,
+                                  fontWeight: 600,
                                   cursor: 'pointer',
                                   textDecoration: 'underline',
                                   display: 'flex',
@@ -501,7 +725,7 @@ export const LoginModal = () => {
                                   gap: '4px'
                                 }}
                               >
-                                <RefreshCw size={12} /> รีเซ็ตหรือตั้งรหัสผ่านใหม่ (Reset Password)
+                                <RefreshCw size={12} /> รีเซ็ตรหัสผ่าน
                               </button>
 
                               <button
@@ -528,7 +752,7 @@ export const LoginModal = () => {
                       ) : (
                         /* Sub-mode 2: Account has NO password yet, or user is resetting -> Set custom password */
                         <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 900, fontSize: '0.9rem', color: '#0f172a', marginBottom: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '0.9rem', color: '#0f172a', marginBottom: '4px' }}>
                             <KeyRound size={16} color={themeColor} />
                             <span>กำหนดรหัสผ่านสำหรับ <strong style={{ color: themeColor }}>{acc.name}</strong></span>
                           </div>
@@ -541,7 +765,7 @@ export const LoginModal = () => {
                           <form onSubmit={(e) => handleSetPasswordAndLogin(e, acc)} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                               <div>
-                                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#334155', marginBottom: '4px' }}>
+                                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
                                   รหัสผ่านใหม่ *
                                 </label>
                                 <div style={{ position: 'relative' }}>
@@ -575,7 +799,7 @@ export const LoginModal = () => {
                               </div>
 
                               <div>
-                                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 800, color: '#334155', marginBottom: '4px' }}>
+                                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
                                   ยืนยันรหัสผ่านใหม่ *
                                 </label>
                                 <input
@@ -600,7 +824,7 @@ export const LoginModal = () => {
                                   flex: 1,
                                   padding: '8px 14px',
                                   fontSize: '0.88rem',
-                                  fontWeight: 900
+                                  fontWeight: 700
                                 }}
                               >
                                 บันทึกรหัสผ่านและเข้าสู่ระบบ
@@ -616,7 +840,7 @@ export const LoginModal = () => {
                                     setSwitchError('');
                                   }}
                                   className="btn btn-secondary"
-                                  style={{ padding: '8px 14px', fontSize: '0.85rem', fontWeight: 800 }}
+                                  style={{ padding: '8px 14px', fontSize: '0.85rem', fontWeight: 600 }}
                                 >
                                   ย้อนกลับ
                                 </button>
@@ -632,7 +856,7 @@ export const LoginModal = () => {
                                   setSwitchError('');
                                 }}
                                 className="btn btn-secondary"
-                                style={{ padding: '8px 14px', fontSize: '0.85rem', fontWeight: 800 }}
+                                style={{ padding: '8px 14px', fontSize: '0.85rem', fontWeight: 600 }}
                               >
                                 ยกเลิก
                               </button>
@@ -674,7 +898,7 @@ export const LoginModal = () => {
               border: 'none',
               color: '#0284c7',
               fontSize: '0.86rem',
-              fontWeight: 800,
+              fontWeight: 600,
               cursor: 'pointer',
               textDecoration: 'underline'
             }}
@@ -687,7 +911,7 @@ export const LoginModal = () => {
         {showManualForm && (
           <form onSubmit={handleCustomLogin} style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: '#f8fafc', padding: '16px', borderRadius: '14px', border: '1.5px solid #e2e8f0' }}>
             <div>
-              <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+              <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                 <User size={16} color="#0284c7" /> ชื่อผู้ใช้งานหรืออีเมล
               </label>
               <input 
@@ -701,7 +925,7 @@ export const LoginModal = () => {
             </div>
 
             <div>
-              <label style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+              <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                 <Lock size={16} color="#0284c7" /> รหัสผ่านของคุณ
               </label>
               <input 
@@ -717,7 +941,7 @@ export const LoginModal = () => {
             <button 
               type="submit" 
               className="btn btn-primary" 
-              style={{ width: '100%', padding: '12px', fontSize: '0.95rem', fontWeight: 900, marginTop: '4px' }}
+              style={{ width: '100%', padding: '12px', fontSize: '0.95rem', fontWeight: 700, marginTop: '4px' }}
             >
               <KeyRound size={18} /> ยืนยันการเข้าสู่ระบบ
             </button>

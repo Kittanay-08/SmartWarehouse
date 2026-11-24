@@ -5,6 +5,8 @@ import './index.css'
 import axios from 'axios'
 import { BrowserRouter } from 'react-router-dom'
 
+axios.defaults.timeout = 7000;
+
 axios.interceptors.request.use(config => {
   const token = localStorage.getItem('token');
   if (token) {

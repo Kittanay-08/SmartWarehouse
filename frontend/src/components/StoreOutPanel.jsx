@@ -67,15 +67,15 @@ export const StoreOutPanel = () => {
               color: deptInfo.color,
               padding: '4px 10px',
               borderRadius: '20px',
-              fontWeight: 800,
+              fontWeight: 600,
               fontSize: '0.8rem'
             }}>
               {deptInfo.badge}
             </span>
           )}
         </div>
-        <h2 style={{ fontSize: '1.85rem', fontWeight: 900, color: '#0f172a' }}>
-          เบิกจ่ายสินค้าอัตโนมัติ (Store-Out / Retrieval Operation)
+        <h2 style={{ fontSize: '1.85rem', fontWeight: 700, color: '#0f172a' }}>
+          เบิกจ่ายสินค้าอัตโนมัติ
         </h2>
         <p style={{ color: '#334155', fontSize: '1.05rem', fontWeight: 600 }}>
           เลือกสินค้าที่ต้องการเบิกจ่าย เครน AS/RS จะเคลื่อนที่ไปดึงสินค้าจากชั้นวางและนำมาส่งที่จุดรับสินค้าทันที
@@ -100,11 +100,11 @@ export const StoreOutPanel = () => {
         }}>
           <ShieldAlert size={28} color="#7c3aed" style={{ flexShrink: 0 }} />
           <div>
-            <div style={{ fontWeight: 900, fontSize: '1.05rem', color: '#581c87', marginBottom: '2px' }}>
-              🔒 โหมดตรวจสอบสต็อกสินค้า (View-Only Mode) — จำกัดสิทธิ์การเบิกจ่าย
+            <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#581c87', marginBottom: '2px' }}>
+              🔒 ตรวจสอบสต็อกสินค้า — จำกัดสิทธิ์การเบิกจ่าย
             </div>
             <div>
-              คุณเข้าสู่ระบบในฐานะ <strong>{user?.name}</strong> ({deptInfo?.badge || user?.role}) — บัญชีของคุณสามารถตรวจสอบรายการสินค้าได้ แต่ <strong>ไม่มีสิทธิ์สั่งเบิกจ่ายสินค้าจริง</strong> ออกจากคลัง (สงวนสิทธิ์เฉพาะ <strong>ฝ่ายปฏิบัติการ (Operator)</strong> และ <strong>ฝ่ายบริหาร (Admin)</strong> เท่านั้น)
+              คุณเข้าสู่ระบบในฐานะ <strong>{user?.name}</strong> ({deptInfo?.badge || user?.role}) — บัญชีของคุณสามารถตรวจสอบรายการสินค้าได้ แต่ <strong>ไม่มีสิทธิ์สั่งเบิกจ่ายสินค้าจริง</strong> ออกจากคลัง (สงวนสิทธิ์เฉพาะ <strong>ฝ่ายปฏิบัติการ</strong> และ <strong>ฝ่ายบริหาร</strong> เท่านั้น)
             </div>
           </div>
         </div>
@@ -123,7 +123,7 @@ export const StoreOutPanel = () => {
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
-          fontWeight: 800
+          fontWeight: 600
         }}>
           {message.type === 'success' ? <CheckCircle size={24} /> : <AlertCircle size={24} />}
           <span>{message.text}</span>
@@ -141,7 +141,7 @@ export const StoreOutPanel = () => {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div className="pulse-dot busy" />
-              <strong style={{ color: '#0f172a', fontSize: '1.15rem', fontWeight: 900 }}>กลไก AS/RS กำลังดำเนินการเบิกจ่าย...</strong>
+              <strong style={{ color: '#0f172a', fontSize: '1.15rem', fontWeight: 700 }}>กลไก AS/RS กำลังดำเนินการเบิกจ่าย...</strong>
             </div>
             <span className="badge badge-amber">{craneState.stepProgress}%</span>
           </div>
@@ -186,9 +186,9 @@ export const StoreOutPanel = () => {
               key={cat}
               onClick={() => setSelectedCategory(cat)}
               className={`btn ${selectedCategory === cat ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ padding: '8px 16px', fontSize: '0.9rem', fontWeight: 800 }}
+              style={{ padding: '8px 16px', fontSize: '0.9rem', fontWeight: 600 }}
             >
-              {cat === 'ALL' ? 'ทั้งหมด (All)' : cat}
+              {cat === 'ALL' ? 'ทั้งหมด' : cat}
             </button>
           ))}
         </div>
@@ -198,7 +198,7 @@ export const StoreOutPanel = () => {
       {filteredSlots.length === 0 ? (
         <div className="glass-panel" style={{ padding: '56px', textAlign: 'center', background: '#ffffff' }}>
           <Package size={60} color="#0284c7" style={{ margin: '0 auto 16px' }} />
-          <h3 style={{ fontSize: '1.35rem', color: '#0f172a', marginBottom: '8px', fontWeight: 800 }}>
+          <h3 style={{ fontSize: '1.35rem', color: '#0f172a', marginBottom: '8px', fontWeight: 600 }}>
             ไม่พบสินค้าที่ตรงกับเงื่อนไขการค้นหา
           </h3>
           <p style={{ fontSize: '1.05rem', color: '#64748b', fontWeight: 600 }}>
@@ -231,7 +231,7 @@ export const StoreOutPanel = () => {
                     border: '1.5px solid #7dd3fc',
                     color: '#0369a1',
                     fontFamily: 'var(--font-mono)',
-                    fontWeight: 900,
+                    fontWeight: 700,
                     fontSize: '0.95rem'
                   }}>
                     {slot.slot_code}
@@ -242,22 +242,18 @@ export const StoreOutPanel = () => {
                   </span>
                 </div>
 
-                <h4 style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a', marginBottom: '12px', lineHeight: 1.4 }}>
+                <h4 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#0f172a', marginBottom: '12px', lineHeight: 1.4 }}>
                   {slot.product_name}
                 </h4>
 
                 <div style={{ fontSize: '0.95rem', color: '#334155', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px', fontWeight: 600 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b', fontWeight: 700 }}>รหัสบาร์โค้ด:</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', color: '#0f172a', fontWeight: 800 }}>{slot.qr_code}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: '#0f172a', fontWeight: 600 }}>{slot.qr_code}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#64748b', fontWeight: 700 }}>พิกัด AS/RS:</span>
-                    <span style={{ color: '#0284c7', fontWeight: 800 }}>X:{slot.x_axis} | Y:{slot.y_axis} | Z:{slot.z_axis}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#64748b', fontWeight: 700 }}>น้ำหนัก:</span>
-                    <span style={{ color: '#0f172a', fontWeight: 800 }}>{slot.weight_kg || 0} kg</span>
+                    <span style={{ color: '#0284c7', fontWeight: 600 }}>X:{slot.x_axis} | Y:{slot.y_axis} | Z:{slot.z_axis}</span>
                   </div>
                   {slot.lot_number && (
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -281,7 +277,7 @@ export const StoreOutPanel = () => {
                     }}
                     disabled={craneState.status !== 'IDLE'}
                     className="btn btn-primary"
-                    style={{ flex: 1, padding: '12px', fontSize: '0.98rem', fontWeight: 800 }}
+                    style={{ flex: 1, padding: '12px', fontSize: '0.98rem', fontWeight: 600 }}
                   >
                     <ArrowUpFromLine size={18} />
                     {craneState.status !== 'IDLE' ? 'กำลังเบิก...' : 'สั่งเบิกจ่าย'}
@@ -295,7 +291,7 @@ export const StoreOutPanel = () => {
                       flex: 1,
                       padding: '12px',
                       fontSize: '0.88rem',
-                      fontWeight: 800,
+                      fontWeight: 600,
                       background: '#f1f5f9',
                       color: '#64748b',
                       borderColor: '#cbd5e1',
@@ -318,17 +314,21 @@ export const StoreOutPanel = () => {
 
       {/* POP-UP MODAL: ยืนยันการสั่งเบิกจ่ายสินค้า */}
       {confirmSlot && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px'
-        }}>
+        <div 
+          className="modal-overlay" 
+          role="dialog" 
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px'
+          }}>
           <div className="card animate-fade-in" style={{
             maxWidth: '450px',
             width: '100%',
@@ -355,7 +355,7 @@ export const StoreOutPanel = () => {
               <AlertTriangle size={36} />
             </div>
 
-            <h3 style={{ fontSize: '1.28rem', fontWeight: 900, color: '#0f172a', marginBottom: '18px' }}>
+            <h3 style={{ fontSize: '1.28rem', fontWeight: 700, color: '#0f172a', marginBottom: '18px' }}>
               ยืนยันการสั่งเบิกจ่ายสินค้า?
             </h3>
 
@@ -368,8 +368,8 @@ export const StoreOutPanel = () => {
               marginBottom: '24px',
               textAlign: 'left'
             }}>
-              <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#0f172a', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '3px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 800 }}>
+              <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#0f172a', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '3px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>
                   {confirmSlot.category || 'General'}
                 </span>
                 <span>{confirmSlot.product_name}</span>
@@ -377,22 +377,16 @@ export const StoreOutPanel = () => {
               <div style={{ fontSize: '0.86rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>📍 <strong>ช่องจัดเก็บ:</strong></span>
-                  <span style={{ fontWeight: 800, color: '#0f172a' }}>{confirmSlot.slot_code} (ชั้น {confirmSlot.level}, ช่อง {confirmSlot.bay})</span>
+                  <span style={{ fontWeight: 600, color: '#0f172a' }}>{confirmSlot.slot_code} (ชั้น {confirmSlot.level}, ช่อง {confirmSlot.bay})</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>🎯 <strong>พิกัด AS/RS:</strong></span>
-                  <span style={{ fontWeight: 800, color: '#0284c7', fontFamily: 'monospace' }}>X:{confirmSlot.x_axis} | Y:{confirmSlot.y_axis} | Z:{confirmSlot.z_axis}</span>
+                  <span style={{ fontWeight: 600, color: '#0284c7', fontFamily: 'monospace' }}>X:{confirmSlot.x_axis} | Y:{confirmSlot.y_axis} | Z:{confirmSlot.z_axis}</span>
                 </div>
                 {confirmSlot.lot_number && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>🔢 <strong>ล็อตสินค้า:</strong></span>
                     <span style={{ fontWeight: 700, color: '#0f172a' }}>{confirmSlot.lot_number}</span>
-                  </div>
-                )}
-                {confirmSlot.weight_kg && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>⚖️ <strong>น้ำหนัก:</strong></span>
-                    <span style={{ fontWeight: 800, color: '#0f172a' }}>{confirmSlot.weight_kg} kg</span>
                   </div>
                 )}
               </div>
@@ -404,7 +398,7 @@ export const StoreOutPanel = () => {
                 type="button"
                 onClick={() => setConfirmSlot(null)}
                 className="btn btn-secondary"
-                style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 800 }}
+                style={{ flex: 1, padding: '12px', fontSize: '0.95rem', fontWeight: 600 }}
               >
                 ✕ ยกเลิก
               </button>
@@ -420,7 +414,7 @@ export const StoreOutPanel = () => {
                   flex: 1.5,
                   padding: '12px',
                   fontSize: '0.95rem',
-                  fontWeight: 900,
+                  fontWeight: 700,
                   background: 'linear-gradient(135deg, #0284c7, #0369a1)',
                   boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
                   display: 'flex',

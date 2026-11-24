@@ -1,15 +1,19 @@
-version: '3.8'
+name: smartwarehouse
 
 services:
-  mqtt:
-    image: eclipse-mosquitto:2
-    container_name: asrs_mqtt
+  db:
+    image: postgres:15-alpine
+    container_name: asrs_db
     restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: warehouse
     ports:
-      - "1883:1883"
-      - "9001:9001"
+      - "5432:5432"
     volumes:
-      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
   backend:
     build: ./backend
@@ -18,12 +22,11 @@ services:
     ports:
       - "5000:5000"
     environment:
-      DATABASE_URL: postgresql://postgres:1234@host.docker.internal:5432/smartwarehouse
-      MQTT_BROKER_URL: mqtt://mqtt:1883
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      DATABASE_URL: postgresql://postgres:1234@db:5432/warehouse
+    volumes:
+      - ./backend/data:/app/data
     depends_on:
-      - mqtt
+      - db
 
   frontend:
     build: ./frontend
@@ -34,13 +37,6 @@ services:
     depends_on:
       - backend
 
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    container_name: asrs_tunnel
-    restart: always
-    command: tunnel --no-autoupdate run
-    environment:
-      - TUNNEL_TOKEN=${TUNNEL_TOKEN:-}
-    depends_on:
-      - frontend
-
+volumes:
+  postgres_data:
+    name: smartwarehouse_postgres_data

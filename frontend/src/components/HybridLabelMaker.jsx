@@ -6,7 +6,7 @@ import { useWarehouse } from '../context/WarehouseContext';
 export const HybridLabelMaker = () => {
   const { slots } = useWarehouse();
 
-  const [productName, setProductName] = useState('น้ำดื่มคริสตัล 600ml (Pack 12)');
+  const [productName, setProductName] = useState('น้ำดื่มคริสตัล 600ml');
   const [barcode, setBarcode] = useState('8851950001015');
   const [category, setCategory] = useState('Beverages');
   const [lotNumber, setLotNumber] = useState(`LOT-${new Date().getFullYear()}-089`);
@@ -130,8 +130,8 @@ export const HybridLabelMaker = () => {
             <span className="badge badge-purple">Smart Label Studio</span>
             <span className="badge badge-emerald">QR + Coordinate Mapping</span>
           </div>
-          <h2 style={{ fontSize: '1.85rem', fontWeight: 900, color: '#0f172a' }}>
-            ออกฉลากสินค้าอัจฉริยะระบุพิกัด (QR Code with AS/RS Coordinate)
+          <h2 style={{ fontSize: '1.85rem', fontWeight: 700, color: '#0f172a' }}>
+            ออกฉลาก QR Code พร้อมพิกัด AS/RS
           </h2>
           <p style={{ color: '#334155', fontSize: '1.05rem', fontWeight: 600 }}>
             สร้างฉลากติดสินค้าพร้อมบรรจุข้อมูลรหัสสินค้า และ <strong>พิกัดตำแหน่งช่องจัดเก็บ (X, Y, Z)</strong> ลงใน QR Code สำหรับสั่งการเครนอัตโนมัติ
@@ -141,9 +141,9 @@ export const HybridLabelMaker = () => {
         <button
           onClick={handlePrint}
           className="btn btn-primary"
-          style={{ padding: '13px 24px', fontSize: '1rem', fontWeight: 800 }}
+          style={{ padding: '13px 24px', fontSize: '1rem', fontWeight: 600 }}
         >
-          <Printer size={20} /> สั่งพิมพ์ฉลาก (Print Label)
+          <Printer size={20} /> สั่งพิมพ์ฉลาก
         </button>
       </div>
 
@@ -155,7 +155,7 @@ export const HybridLabelMaker = () => {
       }}>
         {/* Editor Form */}
         <div className="glass-panel" style={{ padding: '28px', background: '#ffffff', border: '1.5px solid #bae6fd' }}>
-          <h3 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#0f172a', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#0f172a', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <QrCode size={22} color="#0284c7" /> ตั้งค่าข้อมูลสินค้าและพิกัดจัดเก็บ
           </h3>
 
@@ -167,8 +167,8 @@ export const HybridLabelMaker = () => {
               borderRadius: '12px',
               border: '1.5px solid #bae6fd'
             }}>
-              <label style={{ fontSize: '1rem', fontWeight: 800, color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <MapPin size={20} color="#0284c7" /> กำหนดพิกัดตำแหน่งช่องจัดเก็บ (Target Storage Slot) *
+              <label style={{ fontSize: '1rem', fontWeight: 600, color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <MapPin size={20} color="#0284c7" /> กำหนดช่องจัดเก็บ *
               </label>
               <select
                 className="form-input"
@@ -178,7 +178,7 @@ export const HybridLabelMaker = () => {
               >
                 {slots.map(s => (
                   <option key={s.slot_id} value={s.slot_code}>
-                    ช่อง {s.slot_code} — (Rack {s.rack} | ชั้น {s.level} | ช่อง {s.bay}) ➔ พิกัด X:{s.x_axis} Y:{s.y_axis} Z:{s.z_axis} {s.is_occupied ? '⚠️ (มีของอยู่)' : '✨ (ว่าง)'}
+                    ช่อง {s.slot_code} — (Rack {s.rack} | ชั้น {s.level} | ช่อง {s.bay}) ➔ พิกัด X:{s.x_axis} Y:{s.y_axis} Z:{s.z_axis} {s.is_occupied ? '(มีของอยู่)' : '✨ (ว่าง)'}
                   </option>
                 ))}
               </select>
@@ -200,8 +200,8 @@ export const HybridLabelMaker = () => {
             </div>
 
             <div>
-              <label style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
-                ชื่อสินค้า (Product Name)
+              <label style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
+                ชื่อสินค้า
               </label>
               <input
                 type="text"
@@ -212,8 +212,8 @@ export const HybridLabelMaker = () => {
             </div>
 
             <div>
-              <label style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
-                รหัสบาร์โค้ดเดิม / SKU (Code128 Barcode)
+              <label style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
+                รหัสบาร์โค้ด / SKU
               </label>
               <input
                 type="text"
@@ -225,7 +225,7 @@ export const HybridLabelMaker = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
+                <label style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
                   หมวดหมู่
                 </label>
                 <select
@@ -233,7 +233,7 @@ export const HybridLabelMaker = () => {
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                 >
-                  <option value="Beverages">เครื่องดื่ม (Beverages)</option>
+                  <option value="Beverages">เครื่องดื่ม</option>
                   <option value="Electronics">อิเล็กทรอนิกส์</option>
                   <option value="Snacks">อาหาร/ขนม</option>
                   <option value="Parts">ชิ้นส่วนอะไหล่</option>
@@ -242,8 +242,8 @@ export const HybridLabelMaker = () => {
               </div>
 
               <div>
-                <label style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
-                  ล็อตสินค้า (Lot No.)
+                <label style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a', display: 'block', marginBottom: '8px' }}>
+                  ล็อตสินค้า
                 </label>
                 <input
                   type="text"
@@ -257,14 +257,14 @@ export const HybridLabelMaker = () => {
             {/* QR JSON Payload Viewer */}
             <div style={{ marginTop: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 800 }}>
+                <span style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 600 }}>
                   JSON Payload ใน QR Code (พร้อมพิกัด X, Y, Z):
                 </span>
                 <button
                   type="button"
                   onClick={handleCopyPayload}
                   className="btn btn-outline"
-                  style={{ padding: '4px 12px', fontSize: '0.8rem', fontWeight: 800 }}
+                  style={{ padding: '4px 12px', fontSize: '0.8rem', fontWeight: 600 }}
                 >
                   {copied ? <Check size={14} color="#059669" /> : <Copy size={14} />}
                   {copied ? 'คัดลอกแล้ว' : 'Copy'}
@@ -290,8 +290,8 @@ export const HybridLabelMaker = () => {
 
         {/* Live Label Printable Preview */}
         <div className="glass-panel" style={{ padding: '28px', textAlign: 'center', background: '#ffffff', border: '1.5px solid #bae6fd' }}>
-          <h3 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#0f172a', marginBottom: '20px' }}>
-            ตัวอย่างฉลากจริง (Print Preview)
+          <h3 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#0f172a', marginBottom: '20px' }}>
+            ตัวอย่างฉลาก
           </h3>
 
           <div id="printable-label-area" style={{
@@ -308,7 +308,7 @@ export const HybridLabelMaker = () => {
             {/* Header */}
             <div style={{
               fontSize: '8.5pt',
-              fontWeight: 900,
+              fontWeight: 700,
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
               borderBottom: '2px solid #000000',
@@ -320,7 +320,7 @@ export const HybridLabelMaker = () => {
 
             {/* Product Name */}
             <div style={{
-              fontWeight: 900,
+              fontWeight: 700,
               fontSize: '13pt',
               lineHeight: 1.25,
               marginBottom: '12px',
@@ -341,7 +341,7 @@ export const HybridLabelMaker = () => {
               flexDirection: 'column',
               gap: '2px'
             }}>
-              <div style={{ fontSize: '11pt', fontWeight: 900, letterSpacing: '0.05em' }}>
+              <div style={{ fontSize: '11pt', fontWeight: 700, letterSpacing: '0.05em' }}>
                 📍 พิกัดตำแหน่ง: ช่อง {currentSlot.slot_code}
               </div>
               <div style={{ fontSize: '8.5pt', fontWeight: 700, fontFamily: 'monospace', color: '#67e8f9' }}>
@@ -363,7 +363,7 @@ export const HybridLabelMaker = () => {
             <div style={{
               fontFamily: 'monospace',
               fontSize: '11pt',
-              fontWeight: 900,
+              fontWeight: 700,
               letterSpacing: '0.12em',
               marginBottom: '6px',
               color: '#000000'
@@ -380,7 +380,7 @@ export const HybridLabelMaker = () => {
               borderTop: '1.5px dashed #475569',
               paddingTop: '8px',
               marginTop: '10px',
-              fontWeight: 800
+              fontWeight: 600
             }}>
               <span>LOT: {lotNumber}</span>
               <span>CAT: {category}</span>
@@ -392,7 +392,7 @@ export const HybridLabelMaker = () => {
             <button
               onClick={handlePrint}
               className="btn btn-primary"
-              style={{ width: '100%', maxWidth: '360px', margin: '0 auto', padding: '14px', fontSize: '1.05rem', fontWeight: 900 }}
+              style={{ width: '100%', maxWidth: '360px', margin: '0 auto', padding: '14px', fontSize: '1.05rem', fontWeight: 700 }}
             >
               <Printer size={20} /> สั่งพิมพ์ฉลากสติ๊กเกอร์
             </button>

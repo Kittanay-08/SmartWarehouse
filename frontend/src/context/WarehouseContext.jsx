@@ -3,36 +3,37 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import confetti from 'canvas-confetti';
 import { useAuth } from './AuthContext';
+import { soundFx } from '../utils/soundFx';
 
 const WarehouseContext = createContext(null);
 
 // 9 Standard AS/RS Slots (3 Levels x 3 Bays = 9 Slots)
 const DEFAULT_SLOTS = [
-  { slot_id: 1, slot_code: 'A-01-01', rack: 'A', level: 1, bay: 1, x_axis: 1.0, y_axis: 1.0, z_axis: 1.0, is_occupied: true, product_name: 'น้ำดื่มคริสตัล 600ml (Pack 12)', qr_code: '8851950001015', category: 'Beverages', weight_kg: 7.5, lot_number: 'LOT-2026-A101', stored_at: new Date(Date.now() - 3600000).toISOString() },
-  { slot_id: 2, slot_code: 'A-01-02', rack: 'A', level: 1, bay: 2, x_axis: 2.0, y_axis: 1.0, z_axis: 1.0, is_occupied: false, product_name: null, qr_code: null, category: null, weight_kg: 0, lot_number: null, stored_at: null },
-  { slot_id: 3, slot_code: 'A-01-03', rack: 'A', level: 1, bay: 3, x_axis: 3.0, y_axis: 1.0, z_axis: 1.0, is_occupied: true, product_name: 'ชิป ESP32-WROOM Dual Core', qr_code: '8850029381023', category: 'Electronics', weight_kg: 0.8, lot_number: 'LOT-2026-E402', stored_at: new Date(Date.now() - 7200000).toISOString() },
-  { slot_id: 4, slot_code: 'A-02-01', rack: 'A', level: 2, bay: 1, x_axis: 1.0, y_axis: 2.0, z_axis: 1.0, is_occupied: false, product_name: null, qr_code: null, category: null, weight_kg: 0, lot_number: null, stored_at: null },
-  { slot_id: 5, slot_code: 'A-02-02', rack: 'A', level: 2, bay: 2, x_axis: 2.0, y_axis: 2.0, z_axis: 1.0, is_occupied: true, product_name: 'ขนม เลย์ รสคลาสสิค 75g', qr_code: '8850718801129', category: 'Snacks', weight_kg: 1.2, lot_number: 'LOT-2026-S110', stored_at: new Date(Date.now() - 14400000).toISOString() },
-  { slot_id: 6, slot_code: 'A-02-03', rack: 'A', level: 2, bay: 3, x_axis: 3.0, y_axis: 2.0, z_axis: 1.0, is_occupied: false, product_name: null, qr_code: null, category: null, weight_kg: 0, lot_number: null, stored_at: null },
-  { slot_id: 7, slot_code: 'A-03-01', rack: 'A', level: 3, bay: 1, x_axis: 1.0, y_axis: 3.0, z_axis: 1.0, is_occupied: true, product_name: 'มอเตอร์ NEMA 17 Stepper', qr_code: '8859948123019', category: 'Parts', weight_kg: 2.4, lot_number: 'LOT-2026-P881', stored_at: new Date(Date.now() - 21600000).toISOString() },
-  { slot_id: 8, slot_code: 'A-03-02', rack: 'A', level: 3, bay: 2, x_axis: 2.0, y_axis: 3.0, z_axis: 1.0, is_occupied: false, product_name: null, qr_code: null, category: null, weight_kg: 0, lot_number: null, stored_at: null },
-  { slot_id: 9, slot_code: 'A-03-03', rack: 'A', level: 3, bay: 3, x_axis: 3.0, y_axis: 3.0, z_axis: 1.0, is_occupied: false, product_name: null, qr_code: null, category: null, weight_kg: 0, lot_number: null, stored_at: null }
+  { slot_id: 1, slot_code: 'A-01-01', rack: 'A', level: 1, bay: 1, x_axis: 1.0, y_axis: 1.0, z_axis: 1.0, is_occupied: true, product_name: 'น้ำดื่มคริสตัล 600ml', qr_code: '8851950001015', category: 'Beverages', lot_number: 'LOT-2026-A101', stored_at: new Date(Date.now() - 3600000).toISOString() },
+  { slot_id: 2, slot_code: 'A-01-02', rack: 'A', level: 1, bay: 2, x_axis: 2.0, y_axis: 1.0, z_axis: 1.0, is_occupied: false, product_name: null, qr_code: null, category: null, lot_number: null, stored_at: null },
+  { slot_id: 3, slot_code: 'A-01-03', rack: 'A', level: 1, bay: 3, x_axis: 3.0, y_axis: 1.0, z_axis: 1.0, is_occupied: true, product_name: 'ชิป ESP32-WROOM Dual Core', qr_code: '8850029381023', category: 'Electronics', lot_number: 'LOT-2026-E402', stored_at: new Date(Date.now() - 7200000).toISOString() },
+  { slot_id: 4, slot_code: 'A-02-01', rack: 'A', level: 2, bay: 1, x_axis: 1.0, y_axis: 2.0, z_axis: 1.0, is_occupied: false, product_name: null, qr_code: null, category: null, lot_number: null, stored_at: null },
+  { slot_id: 5, slot_code: 'A-02-02', rack: 'A', level: 2, bay: 2, x_axis: 2.0, y_axis: 2.0, z_axis: 1.0, is_occupied: true, product_name: 'ขนม เลย์ รสคลาสสิค 75g', qr_code: '8850718801129', category: 'Snacks', lot_number: 'LOT-2026-S110', stored_at: new Date(Date.now() - 14400000).toISOString() },
+  { slot_id: 6, slot_code: 'A-02-03', rack: 'A', level: 2, bay: 3, x_axis: 3.0, y_axis: 2.0, z_axis: 1.0, is_occupied: false, product_name: null, qr_code: null, category: null, lot_number: null, stored_at: null },
+  { slot_id: 7, slot_code: 'A-03-01', rack: 'A', level: 3, bay: 1, x_axis: 1.0, y_axis: 3.0, z_axis: 1.0, is_occupied: true, product_name: 'มอเตอร์ NEMA 17 Stepper', qr_code: '8859948123019', category: 'Parts', lot_number: 'LOT-2026-P881', stored_at: new Date(Date.now() - 21600000).toISOString() },
+  { slot_id: 8, slot_code: 'A-03-02', rack: 'A', level: 3, bay: 2, x_axis: 2.0, y_axis: 3.0, z_axis: 1.0, is_occupied: false, product_name: null, qr_code: null, category: null, lot_number: null, stored_at: null },
+  { slot_id: 9, slot_code: 'A-03-03', rack: 'A', level: 3, bay: 3, x_axis: 3.0, y_axis: 3.0, z_axis: 1.0, is_occupied: false, product_name: null, qr_code: null, category: null, lot_number: null, stored_at: null }
 ];
 
 const DEFAULT_TRANSACTIONS = [
-  { id: 101, transaction_type: 'STORE_IN', slot_id: 1, slot_code: 'A-01-01', product_name: 'น้ำดื่มคริสตัล 600ml (Pack 12)', qr_code: '8851950001015', category: 'Beverages', weight_kg: 7.5, operator_name: 'กิตติยา สแกนสต็อก', operator_role: 'operator', status: 'COMPLETED', details: 'สแกน QR Code พิมพ์ฉลาก และจัดเก็บเข้าช่องสำเร็จ', created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: 102, transaction_type: 'STORE_IN', slot_id: 3, slot_code: 'A-01-03', product_name: 'ชิป ESP32-WROOM Dual Core', qr_code: '8850029381023', category: 'Electronics', weight_kg: 0.8, operator_name: 'สมชาย จัดการคลัง', operator_role: 'admin', status: 'COMPLETED', details: 'สแกน QR Code พิมพ์ฉลาก และจัดเก็บเข้าช่องสำเร็จ', created_at: new Date(Date.now() - 7200000).toISOString() },
-  { id: 103, transaction_type: 'STORE_IN', slot_id: 5, slot_code: 'A-02-02', product_name: 'ขนม เลย์ รสคลาสสิค 75g', qr_code: '8850718801129', category: 'Snacks', weight_kg: 1.2, operator_name: 'กิตติยา สแกนสต็อก', operator_role: 'operator', status: 'COMPLETED', details: 'จัดเก็บเข้าชั้นวางสำเร็จ', created_at: new Date(Date.now() - 14400000).toISOString() },
-  { id: 104, transaction_type: 'STORE_IN', slot_id: 7, slot_code: 'A-03-01', product_name: 'มอเตอร์ NEMA 17 Stepper', qr_code: '8859948123019', category: 'Parts', weight_kg: 2.4, operator_name: 'วิศวกร ซ่อมบำรุง', operator_role: 'engineer', status: 'COMPLETED', details: 'จัดเก็บเข้าชั้นวางสำเร็จ', created_at: new Date(Date.now() - 21600000).toISOString() }
+  { id: 101, transaction_type: 'STORE_IN', slot_id: 1, slot_code: 'A-01-01', product_name: 'น้ำดื่มคริสตัล 600ml', qr_code: '8851950001015', category: 'Beverages', operator_name: 'กิตติยา สแกนสต็อก', operator_role: 'operator', status: 'COMPLETED', details: 'สแกน QR Code พิมพ์ฉลาก และจัดเก็บเข้าช่องสำเร็จ', created_at: new Date(Date.now() - 3600000).toISOString() },
+  { id: 102, transaction_type: 'STORE_IN', slot_id: 3, slot_code: 'A-01-03', product_name: 'ชิป ESP32-WROOM Dual Core', qr_code: '8850029381023', category: 'Electronics', operator_name: 'สมชาย จัดการคลัง', operator_role: 'admin', status: 'COMPLETED', details: 'สแกน QR Code พิมพ์ฉลาก และจัดเก็บเข้าช่องสำเร็จ', created_at: new Date(Date.now() - 7200000).toISOString() },
+  { id: 103, transaction_type: 'STORE_IN', slot_id: 5, slot_code: 'A-02-02', product_name: 'ขนม เลย์ รสคลาสสิค 75g', qr_code: '8850718801129', category: 'Snacks', operator_name: 'กิตติยา สแกนสต็อก', operator_role: 'operator', status: 'COMPLETED', details: 'จัดเก็บเข้าชั้นวางสำเร็จ', created_at: new Date(Date.now() - 14400000).toISOString() },
+  { id: 104, transaction_type: 'STORE_IN', slot_id: 7, slot_code: 'A-03-01', product_name: 'มอเตอร์ NEMA 17 Stepper', qr_code: '8859948123019', category: 'Parts', operator_name: 'วิศวกร ซ่อมบำรุง', operator_role: 'engineer', status: 'COMPLETED', details: 'จัดเก็บเข้าชั้นวางสำเร็จ', created_at: new Date(Date.now() - 21600000).toISOString() }
 ];
 
 const INITIAL_PRODUCT_CATALOG = {
-  '8851950001015': { name: 'น้ำดื่มคริสตัล 600ml (Pack 12)', category: 'Beverages', weight: '7.5' },
-  '8850029381023': { name: 'ชิป ESP32-WROOM Dual Core', category: 'Electronics', weight: '0.8' },
-  '8850718801129': { name: 'ขนม เลย์ รสคลาสสิค 75g', category: 'Snacks', weight: '1.2' },
-  '8859948123019': { name: 'มอเตอร์ NEMA 17 Stepper', category: 'Parts', weight: '2.4' },
-  '8850123456789': { name: 'นมสดไทย-เดนมาร์ค UHT 200ml (Pack 6)', category: 'Beverages', weight: '1.3' },
-  '8859876543210': { name: 'สายพานไทม์มิ่ง GT2 6mm (5 เมตร)', category: 'Parts', weight: '0.4' },
+  '8851950001015': { name: 'น้ำดื่มคริสตัล 600ml', category: 'Beverages' },
+  '8850029381023': { name: 'ชิป ESP32-WROOM Dual Core', category: 'Electronics' },
+  '8850718801129': { name: 'ขนม เลย์ รสคลาสสิค 75g', category: 'Snacks' },
+  '8859948123019': { name: 'มอเตอร์ NEMA 17 Stepper', category: 'Parts' },
+  '8850123456789': { name: 'นมสดไทย-เดนมาร์ค UHT 200ml', category: 'Beverages' },
+  '8859876543210': { name: 'สายพานไทม์มิ่ง GT2 6mm (5 เมตร)', category: 'Parts' },
 };
 
 const THREE_MONTHS_MS = 90 * 24 * 60 * 60 * 1000;
@@ -93,14 +94,14 @@ export const WarehouseProvider = ({ children }) => {
     carriedItem: null,
     emergencyStop: false,
     stepProgress: 0,
-    stepDescription: 'พร้อมทำงาน (System Ready)'
+    stepDescription: 'พร้อมทำงาน'
   });
 
-  const [mqttStatus, setMqttStatus] = useState({ connected: true, broker: 'mqtt://localhost:1883' });
   const [esp32Connected, setEsp32Connected] = useState(true);
   const [simulatorActive, setSimulatorActive] = useState(true);
-  const [mqttLogs, setMqttLogs] = useState([]);
+  const [telemetryLogs, setTelemetryLogs] = useState([]);
   const [lastScannedQr, setLastScannedQr] = useState(null);
+  const [esp32CamFrame, setEsp32CamFrame] = useState(null);
 
   // Save slots, transactions, and learned product catalog locally
   useEffect(() => {
@@ -126,7 +127,6 @@ export const WarehouseProvider = ({ children }) => {
         [cleanKey]: {
           name: productData.name,
           category: productData.category || 'General',
-          weight: String(productData.weight || '1.0'),
           updatedAt: new Date().toISOString()
         }
       };
@@ -144,10 +144,11 @@ export const WarehouseProvider = ({ children }) => {
   // Fetch initial data
   const fetchData = async () => {
     try {
+      const reqOpt = { timeout: 4000 };
       const [slotsRes, transRes, asrsRes] = await Promise.all([
-        axios.get(`/api/slots`).catch(() => null),
-        axios.get(`/api/logs?limit=100`).catch(() => null),
-        axios.get(`/api/asrs/status`).catch(() => null)
+        axios.get(`/api/slots`, reqOpt).catch(() => null),
+        axios.get(`/api/logs?limit=100`, reqOpt).catch(() => null),
+        axios.get(`/api/asrs/status`, reqOpt).catch(() => null)
       ]);
 
       if (slotsRes && Array.isArray(slotsRes.data) && slotsRes.data.length > 0) {
@@ -159,7 +160,6 @@ export const WarehouseProvider = ({ children }) => {
       }
       if (asrsRes && asrsRes.data) {
         if (asrsRes.data.crane) setCraneState(asrsRes.data.crane);
-        if (asrsRes.data.mqttConnected !== undefined) setMqttStatus(prev => ({ ...prev, connected: asrsRes.data.mqttConnected }));
         if (asrsRes.data.simulatorActive !== undefined) setSimulatorActive(asrsRes.data.simulatorActive);
       }
       setLoading(false);
@@ -175,8 +175,9 @@ export const WarehouseProvider = ({ children }) => {
     // Socket.io Real-time connection
     const socket = io('/', {
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 10,
-      reconnectionDelay: 2000
+      reconnectionAttempts: 15,
+      reconnectionDelay: 1500,
+      timeout: 8000
     });
 
     socket.on('connect', () => {
@@ -202,25 +203,26 @@ export const WarehouseProvider = ({ children }) => {
       localStorage.removeItem('asrs_transactions');
     });
 
-    socket.on('mqtt_message', (msg) => {
-      setMqttLogs(prev => [msg, ...prev.slice(0, 49)]);
-    });
-
-    socket.on('mqtt_status', (status) => {
-      setMqttStatus(status);
-    });
-
     socket.on('esp32_status', (status) => {
       setEsp32Connected(status.connected);
     });
 
+    socket.on('esp32_cam_frame', (frameData) => {
+      setEsp32CamFrame(frameData);
+    });
+
     socket.on('qr_scanned', (data) => {
       console.log('📷 Socket received qr_scanned:', data);
+      const code = data.scanned_qr || data.code || '';
       setLastScannedQr({
-        code: data.scanned_qr || '',
+        code,
+        image: data.image || null,
         device: data.device || 'ESP32_CAM',
         timestamp: data.timestamp || Date.now()
       });
+      if (data.image) {
+        setEsp32CamFrame({ image: data.image, timestamp: data.timestamp || Date.now() });
+      }
     });
 
     return () => {
@@ -239,7 +241,6 @@ export const WarehouseProvider = ({ children }) => {
       product_name: formData.productName,
       qr_code: formData.qrCode,
       category: formData.category || 'General',
-      weight_kg: formData.weightKg || 1.0,
       lot_number: formData.lotNumber || '-',
       operator_name: user?.name || 'ผู้ใช้งาน',
       operator_role: user?.role || 'operator',
@@ -251,8 +252,7 @@ export const WarehouseProvider = ({ children }) => {
     // Auto-learn this product for future scans!
     saveProductToCatalog(formData.qrCode, {
       name: formData.productName,
-      category: formData.category,
-      weight: formData.weightKg
+      category: formData.category
     });
 
     try {
@@ -270,7 +270,6 @@ export const WarehouseProvider = ({ children }) => {
             product_name: formData.productName,
             qr_code: formData.qrCode,
             category: formData.category,
-            weight_kg: formData.weightKg,
             lot_number: formData.lotNumber,
             stored_at: new Date().toISOString()
           };
@@ -285,6 +284,7 @@ export const WarehouseProvider = ({ children }) => {
         spread: 60,
         origin: { y: 0.8 }
       });
+      soundFx.playChime();
 
       fetchData();
       return { success: true, message: res.data.message || `นำเข้าสินค้า "${formData.productName}" สำเร็จ!` };
@@ -297,7 +297,6 @@ export const WarehouseProvider = ({ children }) => {
             product_name: formData.productName,
             qr_code: formData.qrCode,
             category: formData.category,
-            weight_kg: formData.weightKg,
             lot_number: formData.lotNumber,
             stored_at: new Date().toISOString()
           };
@@ -312,6 +311,7 @@ export const WarehouseProvider = ({ children }) => {
         spread: 60,
         origin: { y: 0.8 }
       });
+      soundFx.playChime();
 
       return { success: true, message: `นำเข้าสินค้า "${formData.productName}" เข้าช่อง ${targetSlot?.slot_code} สำเร็จ!` };
     }
@@ -350,7 +350,6 @@ export const WarehouseProvider = ({ children }) => {
             product_name: null,
             qr_code: null,
             category: null,
-            weight_kg: 0,
             lot_number: null,
             stored_at: null
           };
@@ -358,6 +357,7 @@ export const WarehouseProvider = ({ children }) => {
         return s;
       }));
       setTransactions(prev => [newLog, ...prev]);
+      soundFx.playChime();
       fetchData();
       return { success: true, message: res.data.message || `เบิกจ่ายสินค้า "${targetSlot?.product_name || ''}" สำเร็จ!` };
     } catch (err) {
@@ -369,7 +369,6 @@ export const WarehouseProvider = ({ children }) => {
             product_name: null,
             qr_code: null,
             category: null,
-            weight_kg: 0,
             lot_number: null,
             stored_at: null
           };
@@ -377,6 +376,7 @@ export const WarehouseProvider = ({ children }) => {
         return s;
       }));
       setTransactions(prev => [newLog, ...prev]);
+      soundFx.playChime();
 
       return { success: true, message: `เบิกจ่ายสินค้า "${targetSlot?.product_name || ''}" สำเร็จ!` };
     }
@@ -405,7 +405,7 @@ export const WarehouseProvider = ({ children }) => {
       } else if (command === 'HOME') {
         setCraneState(prev => ({ ...prev, currentX: 0, currentY: 0, currentZ: 0, stepDescription: 'กลับสู่ตำแหน่งโฮม (0, 0, 0)' }));
       } else if (command === 'EMERGENCY_STOP') {
-        setCraneState(prev => ({ ...prev, emergencyStop: true, status: 'EMERGENCY_STOP', stepDescription: '⚠️ หยุดฉุกเฉิน (E-Stop Active)' }));
+        setCraneState(prev => ({ ...prev, emergencyStop: true, status: 'EMERGENCY_STOP', stepDescription: ' หยุดฉุกเฉิน (E-Stop Active)' }));
       } else if (command === 'RESET_ESTOP') {
         setCraneState(prev => ({ ...prev, emergencyStop: false, status: 'IDLE', stepDescription: 'ปลดล็อค E-Stop พร้อมทำงาน' }));
       }
@@ -415,7 +415,10 @@ export const WarehouseProvider = ({ children }) => {
 
   const jogCrane = (axis, delta) => sendCraneCommand('JOG', { axis, delta });
   const homeCrane = () => sendCraneCommand('HOME');
-  const emergencyStop = () => sendCraneCommand('EMERGENCY_STOP');
+  const emergencyStop = () => {
+    soundFx.playEstop();
+    return sendCraneCommand('EMERGENCY_STOP');
+  };
   const resetEmergencyStop = () => sendCraneCommand('RESET_ESTOP');
 
   const toggleSimulator = async () => {
@@ -432,7 +435,6 @@ export const WarehouseProvider = ({ children }) => {
   const occupiedSlots = slots.filter(s => s.is_occupied).length;
   const emptySlots = totalSlots - occupiedSlots;
   const occupancyRate = totalSlots > 0 ? ((occupiedSlots / totalSlots) * 100).toFixed(1) : 0;
-  const totalWeight = slots.reduce((acc, s) => acc + (s.is_occupied ? (Number(s.weight_kg) || 0) : 0), 0).toFixed(1);
 
   // Add Slot Handler
   const addSlot = async (slotData) => {
@@ -474,7 +476,6 @@ export const WarehouseProvider = ({ children }) => {
         product_name: null,
         qr_code: null,
         category: null,
-        weight_kg: 0,
         lot_number: null,
         stored_at: null,
         updated_at: new Date().toISOString()
@@ -531,12 +532,13 @@ export const WarehouseProvider = ({ children }) => {
       transactions,
       selectedSlot,
       setSelectedSlot,
-      mqttStatus,
       esp32Connected,
       simulatorActive,
-      mqttLogs,
+      telemetryLogs,
       lastScannedQr,
       setLastScannedQr,
+      esp32CamFrame,
+      setEsp32CamFrame,
       productCatalog,
       saveProductToCatalog,
       lookupProduct,
@@ -544,8 +546,7 @@ export const WarehouseProvider = ({ children }) => {
         totalSlots,
         occupiedSlots,
         emptySlots,
-        occupancyRate,
-        totalWeight
+        occupancyRate
       },
       storeIn,
       storeOut,
